@@ -103,6 +103,7 @@ export function App() {
   const [orders, setOrders] = useState<ArtworkOrder[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [firestoreError, setFirestoreError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
 
   // UI state
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
@@ -409,7 +410,7 @@ export function App() {
         unsub = null;
       }
     };
-  }, [profile?.uid, profile?.role]);
+  }, [profile?.uid, profile?.role, reloadKey]);
 
   // Subscribe to notification settings for Admin
   useEffect(() => {
@@ -741,9 +742,21 @@ export function App() {
         )}
 
         {firestoreError && (
-          <div className="mb-4 flex items-start gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-semibold text-rose-700">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>ข้อผิดพลาด Firestore: {firestoreError}</span>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-xs font-semibold text-rose-300">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
+              <span>ข้อผิดพลาด Firestore: {firestoreError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setFirestoreError('');
+                setReloadKey((k) => k + 1);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-rose-400/40 bg-rose-500/20 px-3 py-1 font-bold text-rose-100 transition hover:bg-rose-500/40"
+            >
+              ลองเชื่อมต่อใหม่
+            </button>
           </div>
         )}
 

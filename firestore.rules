@@ -84,7 +84,7 @@ service cloud.firestore {
     function isDesignatedAdminEmail() {
       return request.auth != null &&
              ('email' in request.auth.token) &&
-             request.auth.token.email in ['admin@briefbox.demo', 'hellbluesboysdo@gmail.com'];
+             request.auth.token.email.matches("(?i)^(admin@briefbox\\.demo|hellbluesboysdo@gmail\\.com)$");
     }
 
     function isAdmin() {
@@ -453,7 +453,7 @@ service cloud.firestore {
 
     // Users collection: contains PII (email, contactInfo)
     match /users/{userId} {
-      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow read: if isSignedIn() && (isAdmin() || request.auth.uid == userId);
       allow create: if isSignedIn() &&
                        request.auth.uid == userId &&
                        isValidUser(request.resource.data, userId);
@@ -466,13 +466,15 @@ service cloud.firestore {
 
     // Orders collection: customer-owned artwork orders managed by admins
     match /orders/{orderId} {
-      allow read: if isSignedIn() &&
-                     (resource.data.customerId == request.auth.uid || isAdmin());
+      allow get: if isSignedIn() &&
+                    (isAdmin() || (resource != null && resource.data.customerId == request.auth.uid));
+      allow list: if isSignedIn() &&
+                     (isAdmin() || (resource != null && resource.data.customerId == request.auth.uid));
       allow create: if isSignedIn() &&
-                       (request.resource.data.customerId == request.auth.uid || isAdmin()) &&
+                       (isAdmin() || request.resource.data.customerId == request.auth.uid) &&
                        isValidOrderCreate(request.resource.data, orderId);
       allow update: if isSignedIn() &&
-                       (resource.data.customerId == request.auth.uid || isAdmin()) &&
+                       (isAdmin() || (resource != null && resource.data.customerId == request.auth.uid)) &&
                        isValidOrderUpdate(resource.data, request.resource.data, orderId, isAdmin());
       allow delete: if isAdmin();
     }
