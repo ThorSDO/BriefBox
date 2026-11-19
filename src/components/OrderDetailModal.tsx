@@ -409,7 +409,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         authorName: profile.displayName,
         authorRole: profile.role,
         message: chatMessage.trim(),
-        attachmentUrl: chatAttachment || undefined,
+        ...(chatAttachment ? { attachmentUrl: chatAttachment } : {}),
         createdAt: new Date().toISOString(),
       };
       await updateDoc(orderRef, {
