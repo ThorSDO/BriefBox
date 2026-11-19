@@ -11,9 +11,12 @@ import {
   AlertCircle,
   Sun,
   Moon,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import {
   createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
@@ -45,11 +48,32 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [displayName, setDisplayName] = useState('');
   const [brandName, setBrandName] = useState('');
   const [contactInfo, setContactInfo] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [resetMsg, setResetMsg] = useState('');
+
+  const handleResetPassword = async () => {
+    setErrorMsg('');
+    setResetMsg('');
+    if (!email.trim()) {
+      setErrorMsg('กรุณากรอกอีเมลของคุณด้านบนก่อนกดรีเซ็ตรหัสผ่าน');
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+      setResetMsg(
+        `ส่งลิงก์ตั้งรหัสผ่านใหม่ไปยัง ${email.trim()} เรียบร้อยแล้ว กรุณาเช็กกล่องจดหมาย (หรือโฟลเดอร์ Spam)`
+      );
+    } catch (err: unknown) {
+      setErrorMsg(
+        (err as Error)?.message || 'ไม่สามารถส่งอีเมลรีเซ็ตรหัสผ่านได้'
+      );
+    }
+  };
 
   const upsertProfile = async (
     uid: string,
@@ -232,6 +256,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               onClick={() => {
                 setMode('login');
                 setErrorMsg('');
+                setResetMsg('');
               }}
               className={`flex-1 rounded-xl py-2.5 text-sm font-bold transition ${
                 mode === 'login'
@@ -246,6 +271,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               onClick={() => {
                 setMode('register');
                 setErrorMsg('');
+                setResetMsg('');
               }}
               className={`flex-1 rounded-xl py-2.5 text-sm font-bold transition ${
                 mode === 'register'
@@ -256,6 +282,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               สมัครสมาชิกใหม่
             </button>
           </div>
+
+          {resetMsg && (
+            <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 p-3.5 text-xs font-medium text-emerald-800">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{resetMsg}</span>
+            </div>
+          )}
 
           {errorMsg && (
             <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-xs font-medium text-rose-700">
@@ -337,20 +370,44 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             </div>
 
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-slate-700">
-                รหัสผ่าน *
-              </label>
+              <div className="mb-1.5 flex items-center justify-between">
+                <label className="block text-xs font-semibold text-slate-700">
+                  รหัสผ่าน *
+                </label>
+                {mode === 'login' && (
+                  <button
+                    type="button"
+                    onClick={handleResetPassword}
+                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+                  >
+                    ลืมรหัสผ่าน?
+                  </button>
+                )}
+              </div>
               <div className="relative">
                 <Lock className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   required
                   minLength={6}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="อย่างน้อย 6 ตัวอักษร"
-                  className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15"
+                  className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-10 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute right-3 top-2.5 text-slate-400 transition hover:text-slate-700"
+                  aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
+                  title={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
               </div>
             </div>
 
