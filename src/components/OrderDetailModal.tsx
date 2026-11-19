@@ -19,7 +19,7 @@ import {
   AlertTriangle,
   UserCheck,
 } from 'lucide-react';
-import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, updateDoc, deleteDoc, arrayUnion } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { compressImageToDataUrl, generateSampleArtworkDataUrl } from '../lib/imageUtils';
 import { sendExternalWebhookNotification } from '../lib/notifications';
@@ -360,7 +360,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         drafts: updatedDrafts,
         usedRevisions: order.usedRevisions + 1,
         status: 'revision',
-        comments: [...order.comments, commentObj],
+        comments: arrayUnion(commentObj),
         updatedAt: new Date().toISOString(),
       });
       void sendExternalWebhookNotification(
@@ -413,7 +413,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         createdAt: new Date().toISOString(),
       };
       await updateDoc(orderRef, {
-        comments: [...order.comments, newComment],
+        comments: arrayUnion(newComment),
         updatedAt: new Date().toISOString(),
       });
       if (profile.role === 'customer') {

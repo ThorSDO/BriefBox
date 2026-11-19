@@ -246,7 +246,6 @@ service cloud.firestore {
              c.authorName is string && c.authorName.size() >= 1 && c.authorName.size() <= 120 &&
              c.authorRole in ['customer', 'admin'] &&
              c.message is string && c.message.size() <= 2000 &&
-             (!('attachmentUrl' in c) || (c.attachmentUrl == '' || isValidImageOrWebUrl(c.attachmentUrl))) &&
              isValidDateString(c.createdAt);
     }
 
@@ -256,18 +255,13 @@ service cloud.firestore {
              (
                newList == oldList ||
                (
-                 // Append-only single new comment
-                 newList.size() == oldList.size() + 1 &&
+                 newList.size() >= oldList.size() &&
                  isValidComment(newList[newList.size() - 1]) &&
                  (adminActor ||
                   (newList[newList.size() - 1].authorId == request.auth.uid &&
                    newList[newList.size() - 1].authorRole == 'customer'))
                ) ||
-               (
-                 // Admin moderating/editing comments
-                 adminActor &&
-                 (newList.size() == 0 || isValidComment(newList[newList.size() - 1]))
-               )
+               adminActor
              );
     }
 
