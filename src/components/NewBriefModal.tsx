@@ -1,0 +1,671 @@
+import React, { useState } from 'react';
+import {
+  X,
+  ImagePlus,
+  Trash2,
+  Calendar,
+  Sparkles,
+  Layers,
+  Palette,
+  Type as TypeIcon,
+  Link2,
+  Check,
+} from 'lucide-react';
+import { collection, addDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import { compressImageToDataUrl } from '../lib/imageUtils';
+import { sendExternalWebhookNotification } from '../lib/notifications';
+import {
+  ArtworkOrder,
+  OrderUrgency,
+  ReferenceImage,
+  UserProfile,
+} from '../types/briefbox';
+
+interface NewBriefModalProps {
+  profile: UserProfile;
+  onClose: () => void;
+  onCreated: (orderTitle: string) => void;
+}
+
+const ARTWORK_TYPES = [
+  'Social Media Post',
+  'Banner / Ads',
+  'Logo / CI',
+  'Poster / สิ่งพิมพ์',
+  'Packaging',
+  'Rich Menu LINE OA',
+  'Infographic',
+  'อื่นๆ',
+];
+
+const DIMENSION_PRESETS = [
+  '1080x1080 px (1:1)',
+  '1080x1350 px (4:5)',
+  '1920x1080 px (16:9)',
+  '1080x1920 px (Story/Reels)',
+  '2500x1686 px (LINE Rich Menu)',
+  'A4 (210x297 mm)',
+];
+
+const FILE_FORMAT_OPTIONS = ['PNG', 'JPG', 'PDF สำหรับพิมพ์', 'AI / PSD ต้นฉบับ'];
+
+const MOOD_PRESETS = [
+  'Minimal / สะอาดตา',
+  'Luxury / พรีเมียม',
+  'สดใส / สนุกสนาน',
+  'ทางการ / น่าเชื่อถือ',
+  'โมเดิร์น / เทคโนโลยี',
+  'วินเทจ / อบอุ่น',
+];
+
+const COLOR_PALETTE_PRESETS = [
+  { name: 'Indigo Studio', colors: ['#1e1b4b', '#4f46e5', '#eef2ff', '#ffffff'] },
+  { name: 'Matcha Earth', colors: ['#064e3b', '#10b981', '#ecfdf5', '#fef3c7'] },
+  { name: 'Luxury Gold', colors: ['#18181b', '#d4af37', '#f8fafc', '#71717a'] },
+  { name: 'Coral Pop', colors: ['#881337', '#f43f5e', '#fff1f2', '#fbbf24'] },
+];
+
+export const NewBriefModal: React.FC<NewBriefModalProps> = ({
+  profile,
+  onClose,
+  onCreated,
+}) => {
+  const defaultDeadline = new Date(Date.now() + 4 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .split('T')[0];
+
+  // Admin can optionally enter custom customer info if creating on behalf of a customer
+  const [customerName, setCustomerName] = useState(profile.displayName);
+  const [customerBrand, setCustomerBrand] = useState(profile.brandName || '');
+  const [customerContact, setCustomerContact] = useState(profile.contactInfo || '');
+
+  // Section 1
+  const [title, setTitle] = useState('');
+  const [artworkType, setArtworkType] = useState(ARTWORK_TYPES[0]);
+  const [dimensions, setDimensions] = useState(DIMENSION_PRESETS[0]);
+  const [customDimension, setCustomDimension] = useState('');
+  const [fileFormats, setFileFormats] = useState<string[]>(['PNG', 'JPG']);
+
+  // Section 2
+  const [moodAndTone, setMoodAndTone] = useState(MOOD_PRESETS[0]);
+  const [colorPalette, setColorPalette] = useState<string[]>(['#4f46e5', '#0f172a', '#ffffff']);
+  const [newColorInput, setNewColorInput] = useState('#10b981');
+  const [headlineText, setHeadlineText] = useState('');
+  const [subText, setSubText] = useState('');
+  const [briefDetails, setBriefDetails] = useState('');
+
+  // Section 3
+  const [referenceImages, setReferenceImages] = useState<ReferenceImage[]>([]);
+  const [referenceUrl, setReferenceUrl] = useState('');
+  const [deadline, setDeadline] = useState(defaultDeadline);
+  const [urgency, setUrgency] = useState<OrderUrgency>('normal');
+
+  const [submitting, setSubmitting] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const toggleFormat = (fmt: string) => {
+    setFileFormats((prev) =>
+      prev.includes(fmt) ? prev.filter((item) => item !== fmt) : [...prev, fmt]
+    );
+  };
+
+  const handleAddColor = () => {
+    if (!colorPalette.includes(newColorInput) && colorPalette.length < 6) {
+      setColorPalette([...colorPalette, newColorInput]);
+    }
+  };
+
+  const handleRemoveColor = (color: string) => {
+    setColorPalette(colorPalette.filter((c) => c !== color));
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    if (referenceImages.length + files.length > 3) {
+      setErrorMsg('สามารถแนบภาพ Reference ได้สูงสุด 3 ภาพต่อออเดอร์');
+      return;
+    }
+
+    setErrorMsg('');
+    setUploadingImage(true);
+    try {
+      const added: ReferenceImage[] = [];
+      for (let i = 0; i < files.length; i += 1) {
+        const file = files[i];
+        const dataUrl = await compressImageToDataUrl(file, 850, 0.7);
+        added.push({
+          id: `${Date.now()}-${i}`,
+          name: file.name,
+          dataUrl,
+        });
+      }
+      setReferenceImages((prev) => [...prev, ...added]);
+    } catch (err: unknown) {
+      setErrorMsg((err as Error)?.message || 'อัปโหลดรูปภาพไม่สำเร็จ');
+    } finally {
+      setUploadingImage(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim()) {
+      setErrorMsg('กรุณาระบุชื่องาน Artwork');
+      return;
+    }
+
+    setErrorMsg('');
+    setSubmitting(true);
+    try {
+      const now = new Date().toISOString();
+      const finalDimensions =
+        dimensions === 'custom'
+          ? customDimension.trim() || 'ตามที่ระบุในบรีฟ'
+          : dimensions;
+
+      const newOrder: Omit<ArtworkOrder, 'id'> = {
+        orderNumber: `BB-${Math.floor(1000 + Math.random() * 9000)}`,
+        customerId: profile.uid,
+        customerName: customerName.trim() || profile.displayName,
+        customerBrand: customerBrand.trim() || profile.brandName || 'ลูกค้าทั่วไป',
+        customerContact: customerContact.trim() || profile.contactInfo || '',
+        title: title.trim(),
+        artworkType,
+        dimensions: finalDimensions,
+        fileFormats: fileFormats.length > 0 ? fileFormats : ['PNG'],
+        moodAndTone,
+        colorPalette,
+        headlineText: headlineText.trim(),
+        subText: subText.trim(),
+        briefDetails: briefDetails.trim(),
+        referenceUrl: referenceUrl.trim(),
+        referenceImages,
+        deadline,
+        urgency,
+        maxRevisions: 3,
+        usedRevisions: 0,
+        status: 'pending_quote',
+        assignedDesigner: '',
+        quotedPrice: 0,
+        quoteNote: '',
+        paymentStatus: 'unpaid',
+        paymentSlipUrl: '',
+        paymentPaidAt: '',
+        drafts: [],
+        finalDeliverableUrl: '',
+        finalPreviewImage: '',
+        finalNote: '',
+        comments: [],
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      await addDoc(collection(db, 'orders'), newOrder);
+      void sendExternalWebhookNotification(
+        `🎨 [BriefBox] มีออเดอร์ใหม่!\n• รหัส: ${newOrder.orderNumber}\n• ชื่องาน: ${newOrder.title}\n• ลูกค้า: ${newOrder.customerName} (${newOrder.customerBrand})\n• ประเภท: ${newOrder.artworkType} (${newOrder.dimensions})\n• กำหนดส่ง: ${newOrder.deadline} (${newOrder.urgency})`
+      );
+      onCreated(newOrder.title);
+      onClose();
+    } catch (err: unknown) {
+      setErrorMsg((err as Error)?.message || 'บันทึกบรีฟงานไม่สำเร็จ กรุณาลองอีกครั้ง');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-3 backdrop-blur-xs sm:p-6">
+      <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-slate-100 bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-4 text-white">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15">
+              <Sparkles className="h-5 w-5 text-amber-300" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold sm:text-lg">
+                สั่งงาน Artwork ใหม่ (Creative Brief)
+              </h2>
+              <p className="text-xs text-indigo-100">
+                กรอกรายละเอียดบรีฟให้ครบถ้วนเพื่อให้ดีไซเนอร์ประเมินราคาและออกแบบได้ตรงใจที่สุด
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl p-1.5 text-white/80 transition hover:bg-white/15 hover:text-white"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Scrollable Form */}
+        <form onSubmit={handleSubmit} className="flex-1 space-y-6 overflow-y-auto p-6">
+          {errorMsg && (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-semibold text-rose-700">
+              {errorMsg}
+            </div>
+          )}
+
+          {/* Customer Info (editable when admin creates on behalf of client) */}
+          {profile.role === 'admin' && (
+            <div className="rounded-2xl border border-violet-200 bg-violet-50/50 p-4">
+              <p className="mb-2.5 text-xs font-bold text-violet-800">
+                ข้อมูลลูกค้า (โหมดแอดมิน: สามารถระบุชื่อลูกค้า/แบรนด์ที่สั่งงานได้)
+              </p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <input
+                  type="text"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  placeholder="ชื่อลูกค้า"
+                  className="rounded-xl border border-violet-200 bg-white px-3 py-2 text-xs outline-none focus:border-violet-500"
+                />
+                <input
+                  type="text"
+                  value={customerBrand}
+                  onChange={(e) => setCustomerBrand(e.target.value)}
+                  placeholder="ชื่อแบรนด์ / ร้าน"
+                  className="rounded-xl border border-violet-200 bg-white px-3 py-2 text-xs outline-none focus:border-violet-500"
+                />
+                <input
+                  type="text"
+                  value={customerContact}
+                  onChange={(e) => setCustomerContact(e.target.value)}
+                  placeholder="เบอร์โทร / LINE ID"
+                  className="rounded-xl border border-violet-200 bg-white px-3 py-2 text-xs outline-none focus:border-violet-500"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Section 1: Specs */}
+          <section className="space-y-4">
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+              <Layers className="h-4 w-4 text-indigo-600" />
+              <h3 className="text-sm font-bold text-slate-900">
+                ส่วนที่ 1: ข้อมูลชิ้นงาน & ขนาด
+              </h3>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                ชื่องาน / โปรเจกต์ *
+              </label>
+              <input
+                type="text"
+                required
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="เช่น แบนเนอร์โปรโมชั่น 11.11 ลด 50%, โปสเตอร์เมนูใหม่ Matcha Latte"
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                ประเภทงาน Artwork
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {ARTWORK_TYPES.map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => setArtworkType(type)}
+                    className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
+                      artworkType === type
+                        ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    {type}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                ขนาดและสัดส่วนภาพ
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {DIMENSION_PRESETS.map((dim) => (
+                  <button
+                    key={dim}
+                    type="button"
+                    onClick={() => setDimensions(dim)}
+                    className={`rounded-xl border px-3 py-1.5 text-xs font-medium transition ${
+                      dimensions === dim
+                        ? 'border-indigo-600 bg-indigo-50 text-indigo-700 font-semibold'
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    {dim}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setDimensions('custom')}
+                  className={`rounded-xl border px-3 py-1.5 text-xs font-medium transition ${
+                    dimensions === 'custom'
+                      ? 'border-indigo-600 bg-indigo-50 text-indigo-700 font-semibold'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  กำหนดขนาดเอง
+                </button>
+              </div>
+              {dimensions === 'custom' && (
+                <input
+                  type="text"
+                  value={customDimension}
+                  onChange={(e) => setCustomDimension(e.target.value)}
+                  placeholder="ระบุขนาด เช่น 1200x628 px หรือ กว้าง 80 x สูง 200 cm (Roll-up)"
+                  className="mt-2.5 w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs outline-none focus:border-indigo-500"
+                />
+              )}
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                นามสกุลไฟล์ที่ต้องการรับ (เลือกได้มากกว่า 1)
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {FILE_FORMAT_OPTIONS.map((fmt) => {
+                  const selected = fileFormats.includes(fmt);
+                  return (
+                    <button
+                      key={fmt}
+                      type="button"
+                      onClick={() => toggleFormat(fmt)}
+                      className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
+                        selected
+                          ? 'border-emerald-600 bg-emerald-50 text-emerald-700'
+                          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      {selected && <Check className="h-3.5 w-3.5" />}
+                      <span>{fmt}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+
+          {/* Section 2: Style & Copywriting */}
+          <section className="space-y-4">
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+              <Palette className="h-4 w-4 text-indigo-600" />
+              <h3 className="text-sm font-bold text-slate-900">
+                ส่วนที่ 2: สไตล์ โทนสี & ข้อความในภาพ (Copywriting)
+              </h3>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                Mood & Tone ที่ต้องการ
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {MOOD_PRESETS.map((mood) => (
+                  <button
+                    key={mood}
+                    type="button"
+                    onClick={() => setMoodAndTone(mood)}
+                    className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
+                      moodAndTone === mood
+                        ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    {mood}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                โทนสีของแบรนด์ / สีที่ต้องการเน้น
+              </label>
+              <div className="mb-2.5 flex flex-wrap gap-2">
+                {COLOR_PALETTE_PRESETS.map((preset) => (
+                  <button
+                    key={preset.name}
+                    type="button"
+                    onClick={() => setColorPalette(preset.colors)}
+                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+                  >
+                    <span className="flex -space-x-1">
+                      {preset.colors.map((c) => (
+                        <span
+                          key={c}
+                          className="h-3.5 w-3.5 rounded-full border border-white shadow-xs"
+                          style={{ backgroundColor: c }}
+                        />
+                      ))}
+                    </span>
+                    <span>{preset.name}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {colorPalette.map((color) => (
+                  <div
+                    key={color}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white py-1 pl-1.5 pr-2 text-xs font-mono"
+                  >
+                    <span
+                      className="h-4 w-4 rounded-md border border-slate-200"
+                      style={{ backgroundColor: color }}
+                    />
+                    <span className="text-slate-700">{color}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveColor(color)}
+                      className="text-slate-400 hover:text-rose-500"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+                <div className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-slate-300 px-2 py-1">
+                  <input
+                    type="color"
+                    value={newColorInput}
+                    onChange={(e) => setNewColorInput(e.target.value)}
+                    className="h-5 w-6 cursor-pointer border-0 bg-transparent p-0"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddColor}
+                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+                  >
+                    + เพิ่มสี
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                  <TypeIcon className="h-3.5 w-3.5 text-slate-400" />
+                  <span>ข้อความหลักในภาพ (Headline)</span>
+                </label>
+                <input
+                  type="text"
+                  value={headlineText}
+                  onChange={(e) => setHeadlineText(e.target.value)}
+                  placeholder="เช่น ลดแรง 50% เฉพาะสัปดาห์นี้!"
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-indigo-500"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                  ข้อความรอง / ราคา / ช่องทางติดต่อในภาพ
+                </label>
+                <input
+                  type="text"
+                  value={subText}
+                  onChange={(e) => setSubText(e.target.value)}
+                  placeholder="เช่น วันนี้ - 30 พ.ย. • LINE @bloomcafe"
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-indigo-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                รายละเอียดบรีฟเพิ่มเติม (สิ่งที่อยากเน้น หรือสิ่งที่ห้ามใส่)
+              </label>
+              <textarea
+                rows={3}
+                value={briefDetails}
+                onChange={(e) => setBriefDetails(e.target.value)}
+                placeholder="อธิบายภาพรวมที่ต้องการ เช่น อยากให้สินค้าอยู่ตรงกลาง มีแสงเงาดูพรีเมียม ตัวหนังสืออ่านง่ายบนมือถือ..."
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-indigo-500"
+              />
+            </div>
+          </section>
+
+          {/* Section 3: References & Deadline */}
+          <section className="space-y-4">
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+              <Calendar className="h-4 w-4 text-indigo-600" />
+              <h3 className="text-sm font-bold text-slate-900">
+                ส่วนที่ 3: ภาพตัวอย่าง (Reference) & กำหนดส่งงาน
+              </h3>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                แนบภาพตัวอย่าง / โลโก้ / ภาพสินค้า (สูงสุด 3 ภาพ)
+              </label>
+              <div className="flex flex-wrap items-center gap-3">
+                {referenceImages.map((img) => (
+                  <div
+                    key={img.id}
+                    className="group relative h-24 w-24 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100"
+                  >
+                    <img
+                      src={img.dataUrl}
+                      alt={img.name}
+                      className="h-full w-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setReferenceImages((prev) =>
+                          prev.filter((item) => item.id !== img.id)
+                        )
+                      }
+                      className="absolute right-1 top-1 rounded-lg bg-slate-900/70 p-1 text-white opacity-0 transition group-hover:opacity-100"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+
+                {referenceImages.length < 3 && (
+                  <label className="flex h-24 w-36 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50/60 text-xs font-semibold text-slate-500 transition hover:border-indigo-400 hover:bg-indigo-50/40 hover:text-indigo-600">
+                    <ImagePlus className="mb-1 h-5 w-5" />
+                    <span>{uploadingImage ? 'กำลังย่อภาพ...' : 'อัปโหลดรูปภาพ'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handleImageUpload}
+                      disabled={uploadingImage}
+                      className="hidden"
+                    />
+                  </label>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                <Link2 className="h-3.5 w-3.5 text-slate-400" />
+                <span>ลิงก์ Reference หรือ Google Drive โลโก้/ไฟล์สินค้า (ถ้ามี)</span>
+              </label>
+              <input
+                type="url"
+                value={referenceUrl}
+                onChange={(e) => setReferenceUrl(e.target.value)}
+                placeholder="https://drive.google.com/... หรือ https://pinterest.com/..."
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                  วันที่ต้องการรับงาน (Deadline)
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={deadline}
+                  onChange={(e) => setDeadline(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                  ความเร่งด่วน
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { value: 'normal' as OrderUrgency, label: 'ปกติ (3-5 วัน)' },
+                    { value: 'urgent' as OrderUrgency, label: 'ด่วน (1-2 วัน)' },
+                    { value: 'express' as OrderUrgency, label: 'ด่วนมาก (24ชม.)' },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setUrgency(opt.value)}
+                      className={`rounded-xl border px-2 py-2 text-[11px] font-semibold transition ${
+                        urgency === opt.value
+                          ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
+                          : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
+        </form>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            ยกเลิก
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={submitting || uploadingImage}
+            className="rounded-xl bg-indigo-600 px-5 py-2 text-sm font-bold text-white shadow-md shadow-indigo-600/20 transition hover:bg-indigo-700 disabled:opacity-60"
+          >
+            {submitting ? 'กำลังส่งบรีฟ...' : 'ส่งบรีฟสั่งงาน Artwork'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};

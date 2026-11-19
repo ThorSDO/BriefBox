@@ -1,0 +1,494 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // This security rules file assumes the following data structures:
+    //
+    // Collection: users
+    // Document ID: {userId} (must match Firebase Auth UID)
+    // Fields:
+    //   - uid: string (required, immutable, must equal {userId} and request.auth.uid)
+    //   - email: string (required, valid email format or empty string, max 254 chars)
+    //   - displayName: string (required, max 120 chars)
+    //   - brandName: string (required, max 120 chars)
+    //   - contactInfo: string (required, max 300 chars)
+    //   - role: string (required, enum: 'customer' | 'admin'; 'admin' restricted to
+    //     designated studio admin emails)
+    //   - createdAt: string (required, immutable, ISO-8601 datetime string)
+    //
+    // Collection: settings
+    // Document ID: notifications
+    // Fields:
+    //   - enableSound: bool (required)
+    //   - enableDesktop: bool (required)
+    //   - telegramBotToken: string (required, max 200 chars)
+    //   - telegramChatId: string (required, max 100 chars)
+    //   - discordWebhookUrl: string (required, empty or https:// URL, max 500 chars)
+    //   - updatedAt: string (required, ISO-8601 datetime string)
+    //
+    // Collection: orders
+    // Document ID: {orderId}
+    // Fields:
+    //   - id: string (optional, immutable if present, must equal {orderId})
+    //   - orderNumber: string (required, immutable for non-admin, 1..40 chars)
+    //   - customerId: string (required, immutable for non-admin, 1..128 chars)
+    //   - customerName: string (required, max 120 chars)
+    //   - customerBrand: string (required, max 120 chars)
+    //   - customerContact: string (required, max 300 chars)
+    //   - title: string (required, 1..200 chars)
+    //   - artworkType: string (required, 1..100 chars)
+    //   - dimensions: string (required, max 120 chars)
+    //   - fileFormats: list<string> (required, max 8 items)
+    //   - moodAndTone: string (required, max 500 chars)
+    //   - colorPalette: list<string> (required, max 8 items)
+    //   - headlineText: string (required, max 500 chars)
+    //   - subText: string (required, max 1000 chars)
+    //   - briefDetails: string (required, max 5000 chars)
+    //   - referenceUrl: string (required, empty or http(s) URL, max 2048 chars)
+    //   - referenceImages: list<map> (required, max 6 items; each has id, name, dataUrl)
+    //   - deadline: string (required, empty or YYYY-MM-DD / ISO datetime, max 40 chars)
+    //   - urgency: string (required, enum: 'normal' | 'urgent' | 'express')
+    //   - maxRevisions: number (required, immutable for non-admin, 0..100)
+    //   - usedRevisions: number (required, 0..100; customer can only increment +1 on revision)
+    //   - status: string (required, enum: 'pending_quote' | 'quoted' | 'in_queue' |
+    //             'designing' | 'review' | 'revision' | 'completed' | 'cancelled')
+    //   - assignedDesigner: string (required, admin-managed, max 120 chars)
+    //   - quotedPrice: number (required, admin-managed, 0..10000000)
+    //   - quoteNote: string (required, admin-managed, max 2000 chars)
+    //   - paymentStatus: string (required, enum: 'unpaid' | 'pending_verification' | 'paid')
+    //   - paymentSlipUrl: string (required, empty or image/web URL, max 900000 chars)
+    //   - paymentPaidAt: string (required, empty or ISO datetime, max 40 chars)
+    //   - drafts: list<map> (required, max 20 items; ArtworkDraft shape)
+    //   - finalDeliverableUrl: string (required, admin-managed, empty or image/web URL)
+    //   - finalPreviewImage: string (required, admin-managed, empty or image/web URL)
+    //   - finalNote: string (required, admin-managed, max 2000 chars)
+    //   - comments: list<map> (required, max 100 items; OrderComment shape)
+    //   - createdAt: string (required, immutable, ISO-8601 datetime string)
+    //   - updatedAt: string (required, ISO-8601 datetime string)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isDesignatedAdminEmail() {
+      return request.auth != null &&
+             ('email' in request.auth.token) &&
+             request.auth.token.email in ['admin@briefbox.demo', 'hellbluesboysdo@gmail.com'];
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+             (isDesignatedAdminEmail() ||
+              (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+               get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+    }
+
+    function hasRequiredFields(data, fields) {
+      return data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(data, fields) {
+      return data.keys().hasOnly(fields);
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string &&
+             email.size() <= 254 &&
+             email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidWebUrl(url) {
+      return url is string &&
+             url.size() <= 2048 &&
+             url.matches("^https?://.*");
+    }
+
+    // Allows http(s) URLs or compressed raster image data URLs (blocks SVG/HTML XSS payloads).
+    function isValidImageOrWebUrl(url) {
+      return url is string &&
+             url.size() > 0 &&
+             url.size() <= 900000 &&
+             (
+               (url.size() <= 2048 && url.matches("^https?://.*")) ||
+               url.matches("^data:image/(jpeg|jpg|png|webp|gif);base64,.*")
+             );
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string &&
+             dateStr.size() >= 19 &&
+             dateStr.size() <= 40 &&
+             dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,9})?(Z|[+-]\\d{2}:\\d{2})?$");
+    }
+
+    function isValidDeadline(dateStr) {
+      return dateStr is string &&
+             dateStr.size() <= 40 &&
+             (dateStr == '' ||
+              dateStr.matches("^\\d{4}-\\d{2}-\\d{2}$") ||
+              isValidDateString(dateStr));
+    }
+
+    // ===============================================================
+    // Domain Validators: Users
+    // ===============================================================
+
+    function isValidUser(data, userId) {
+      return hasOnlyAllowedFields(data, [
+               'uid', 'email', 'displayName', 'brandName',
+               'contactInfo', 'role', 'createdAt'
+             ]) &&
+             hasRequiredFields(data, [
+               'uid', 'email', 'displayName', 'brandName',
+               'contactInfo', 'role', 'createdAt'
+             ]) &&
+             data.uid is string &&
+             data.uid.size() >= 1 &&
+             data.uid.size() <= 128 &&
+             data.uid == userId &&
+             data.uid == request.auth.uid &&
+             data.email is string &&
+             data.email.size() <= 254 &&
+             (data.email == '' || isValidEmail(data.email)) &&
+             data.displayName is string &&
+             data.displayName.size() <= 120 &&
+             data.brandName is string &&
+             data.brandName.size() <= 120 &&
+             data.contactInfo is string &&
+             data.contactInfo.size() <= 300 &&
+             data.role is string &&
+             (data.role == 'customer' || (data.role == 'admin' && isDesignatedAdminEmail())) &&
+             isValidDateString(data.createdAt);
+    }
+
+    // ===============================================================
+    // Domain Validators: Orders & Nested Structures
+    // ===============================================================
+
+    function isValidReferenceImage(img) {
+      return img is map &&
+             img.keys().hasAll(['id', 'name', 'dataUrl']) &&
+             img.keys().hasOnly(['id', 'name', 'dataUrl']) &&
+             img.id is string && img.id.size() >= 1 && img.id.size() <= 100 &&
+             img.name is string && img.name.size() >= 1 && img.name.size() <= 255 &&
+             isValidImageOrWebUrl(img.dataUrl);
+    }
+
+    function isValidDraft(d) {
+      return d is map &&
+             d.keys().hasAll(['version', 'imageUrl', 'designerNote', 'submittedAt', 'status']) &&
+             d.keys().hasOnly([
+               'version', 'imageUrl', 'externalLink', 'designerNote',
+               'submittedAt', 'status', 'customerFeedback', 'reviewedAt'
+             ]) &&
+             d.version is number && d.version >= 1 && d.version <= 100 &&
+             (d.imageUrl == '' || isValidImageOrWebUrl(d.imageUrl)) &&
+             (!('externalLink' in d) || (d.externalLink == '' || isValidWebUrl(d.externalLink))) &&
+             d.designerNote is string && d.designerNote.size() <= 2000 &&
+             isValidDateString(d.submittedAt) &&
+             d.status in ['pending_review', 'revision_requested', 'approved'] &&
+             (!('customerFeedback' in d) || (d.customerFeedback is string && d.customerFeedback.size() <= 2000)) &&
+             (!('reviewedAt' in d) || (d.reviewedAt == '' || isValidDateString(d.reviewedAt)));
+    }
+
+    function isCustomerDraftReviewValid(oldDraft, newDraft) {
+      return oldDraft.status == 'pending_review' &&
+             newDraft.status in ['revision_requested', 'approved'] &&
+             newDraft.version == oldDraft.version &&
+             newDraft.imageUrl == oldDraft.imageUrl &&
+             newDraft.designerNote == oldDraft.designerNote &&
+             newDraft.submittedAt == oldDraft.submittedAt &&
+             ((!('externalLink' in oldDraft) && !('externalLink' in newDraft)) ||
+              ('externalLink' in oldDraft && 'externalLink' in newDraft && newDraft.externalLink == oldDraft.externalLink));
+    }
+
+    function isValidDraftsOnUpdate(oldList, newList, oldStatus, adminActor) {
+      return newList is list &&
+             newList.size() <= 20 &&
+             (
+               newList == oldList ||
+               (
+                 // Customer reviewing the latest pending_review draft
+                 !adminActor &&
+                 oldList.size() >= 1 &&
+                 (oldStatus == 'review' || oldList[oldList.size() - 1].status == 'pending_review') &&
+                 newList.size() == oldList.size() &&
+                 (newList.size() == 1 || newList[0:newList.size() - 1] == oldList[0:oldList.size() - 1]) &&
+                 isValidDraft(newList[newList.size() - 1]) &&
+                 isCustomerDraftReviewValid(oldList[oldList.size() - 1], newList[newList.size() - 1])
+               ) ||
+               (
+                 // Admin appending a new draft (up to 20 total)
+                 adminActor &&
+                 newList.size() == oldList.size() + 1 &&
+                 (oldList.size() == 0 || newList[0:oldList.size()] == oldList) &&
+                 isValidDraft(newList[newList.size() - 1])
+               ) ||
+               (
+                 // Admin updating drafts
+                 adminActor &&
+                 (newList.size() == 0 || isValidDraft(newList[newList.size() - 1]))
+               )
+             );
+    }
+
+    function isValidComment(c) {
+      return c is map &&
+             c.keys().hasAll(['id', 'authorId', 'authorName', 'authorRole', 'message', 'createdAt']) &&
+             c.keys().hasOnly([
+               'id', 'authorId', 'authorName', 'authorRole',
+               'message', 'attachmentUrl', 'createdAt'
+             ]) &&
+             c.id is string && c.id.size() >= 1 && c.id.size() <= 100 &&
+             c.authorId is string && c.authorId.size() >= 1 && c.authorId.size() <= 128 &&
+             c.authorName is string && c.authorName.size() >= 1 && c.authorName.size() <= 120 &&
+             c.authorRole in ['customer', 'admin'] &&
+             c.message is string && c.message.size() <= 2000 &&
+             (!('attachmentUrl' in c) || (c.attachmentUrl == '' || isValidImageOrWebUrl(c.attachmentUrl))) &&
+             isValidDateString(c.createdAt);
+    }
+
+    function isValidCommentsOnUpdate(oldList, newList, adminActor) {
+      return newList is list &&
+             newList.size() <= 100 &&
+             (
+               newList == oldList ||
+               (
+                 // Append-only single new comment (customer must author as themselves)
+                 newList.size() == oldList.size() + 1 &&
+                 (oldList.size() == 0 || newList[0:oldList.size()] == oldList) &&
+                 isValidComment(newList[newList.size() - 1]) &&
+                 (adminActor ||
+                  (newList[newList.size() - 1].authorId == request.auth.uid &&
+                   newList[newList.size() - 1].authorRole == 'customer'))
+               ) ||
+               (
+                 // Admin moderating/editing comments
+                 adminActor &&
+                 (newList.size() == 0 || isValidComment(newList[newList.size() - 1]))
+               )
+             );
+    }
+
+    function isValidOrderBase(data, orderId) {
+      return hasOnlyAllowedFields(data, [
+               'id', 'orderNumber', 'customerId', 'customerName', 'customerBrand',
+               'customerContact', 'title', 'artworkType', 'dimensions', 'fileFormats',
+               'moodAndTone', 'colorPalette', 'headlineText', 'subText', 'briefDetails',
+               'referenceUrl', 'referenceImages', 'deadline', 'urgency', 'maxRevisions',
+               'usedRevisions', 'status', 'assignedDesigner', 'quotedPrice', 'quoteNote',
+               'paymentStatus', 'paymentSlipUrl', 'paymentPaidAt', 'drafts',
+               'finalDeliverableUrl', 'finalPreviewImage', 'finalNote', 'comments',
+               'createdAt', 'updatedAt'
+             ]) &&
+             hasRequiredFields(data, [
+               'orderNumber', 'customerId', 'customerName', 'customerBrand',
+               'customerContact', 'title', 'artworkType', 'dimensions', 'fileFormats',
+               'moodAndTone', 'colorPalette', 'headlineText', 'subText', 'briefDetails',
+               'referenceUrl', 'referenceImages', 'deadline', 'urgency', 'maxRevisions',
+               'usedRevisions', 'status', 'assignedDesigner', 'quotedPrice', 'quoteNote',
+               'paymentStatus', 'paymentSlipUrl', 'paymentPaidAt', 'drafts',
+               'finalDeliverableUrl', 'finalPreviewImage', 'finalNote', 'comments',
+               'createdAt', 'updatedAt'
+             ]) &&
+             (!('id' in data) || (data.id is string && data.id == orderId)) &&
+             data.orderNumber is string && data.orderNumber.size() >= 1 && data.orderNumber.size() <= 40 &&
+             data.customerId is string && data.customerId.size() >= 1 && data.customerId.size() <= 128 &&
+             data.customerName is string && data.customerName.size() <= 120 &&
+             data.customerBrand is string && data.customerBrand.size() <= 120 &&
+             data.customerContact is string && data.customerContact.size() <= 300 &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+             data.artworkType is string && data.artworkType.size() >= 1 && data.artworkType.size() <= 100 &&
+             data.dimensions is string && data.dimensions.size() <= 120 &&
+             data.fileFormats is list && data.fileFormats.size() <= 8 &&
+             data.moodAndTone is string && data.moodAndTone.size() <= 500 &&
+             data.colorPalette is list && data.colorPalette.size() <= 8 &&
+             data.headlineText is string && data.headlineText.size() <= 500 &&
+             data.subText is string && data.subText.size() <= 1000 &&
+             data.briefDetails is string && data.briefDetails.size() <= 5000 &&
+             (data.referenceUrl == '' || isValidWebUrl(data.referenceUrl)) &&
+             data.referenceImages is list && data.referenceImages.size() <= 6 &&
+             isValidDeadline(data.deadline) &&
+             data.urgency in ['normal', 'urgent', 'express'] &&
+             data.maxRevisions is number && data.maxRevisions >= 0 && data.maxRevisions <= 100 &&
+             data.usedRevisions is number && data.usedRevisions >= 0 && data.usedRevisions <= 100 &&
+             data.status in [
+               'pending_quote', 'quoted', 'in_queue', 'designing',
+               'review', 'revision', 'completed', 'cancelled'
+             ] &&
+             data.assignedDesigner is string && data.assignedDesigner.size() <= 120 &&
+             data.quotedPrice is number && data.quotedPrice >= 0 && data.quotedPrice <= 10000000 &&
+             data.quoteNote is string && data.quoteNote.size() <= 2000 &&
+             data.paymentStatus in ['unpaid', 'pending_verification', 'paid'] &&
+             (data.paymentSlipUrl == '' || isValidImageOrWebUrl(data.paymentSlipUrl)) &&
+             (data.paymentPaidAt == '' || isValidDateString(data.paymentPaidAt)) &&
+             data.drafts is list && data.drafts.size() <= 20 &&
+             (data.finalDeliverableUrl == '' || isValidImageOrWebUrl(data.finalDeliverableUrl)) &&
+             (data.finalPreviewImage == '' || isValidImageOrWebUrl(data.finalPreviewImage)) &&
+             data.finalNote is string && data.finalNote.size() <= 2000 &&
+             data.comments is list && data.comments.size() <= 100 &&
+             isValidDateString(data.createdAt) &&
+             isValidDateString(data.updatedAt);
+    }
+
+    function isValidOrderCreate(data, orderId) {
+      return isValidOrderBase(data, orderId) &&
+             (data.fileFormats.size() == 0 ||
+              (data.fileFormats[0] is string && data.fileFormats[0].size() >= 1 && data.fileFormats[0].size() <= 30)) &&
+             (data.colorPalette.size() == 0 ||
+              (data.colorPalette[0] is string && data.colorPalette[0].size() >= 1 && data.colorPalette[0].size() <= 50)) &&
+             (data.referenceImages.size() == 0 || isValidReferenceImage(data.referenceImages[0])) &&
+             (data.drafts.size() == 0 ||
+              (isValidDraft(data.drafts[0]) && isValidDraft(data.drafts[data.drafts.size() - 1]))) &&
+             (data.comments.size() == 0 ||
+              (isValidComment(data.comments[0]) && isValidComment(data.comments[data.comments.size() - 1])));
+    }
+
+    function isValidCustomerStatusTransition(oldData, newData) {
+      let oldStatus = oldData.status;
+      let newStatus = newData.status;
+      let hasPendingDraft = oldData.drafts.size() >= 1 &&
+                            oldData.drafts[oldData.drafts.size() - 1].status == 'pending_review';
+      return newStatus == oldStatus ||
+             (oldStatus in ['pending_quote', 'quoted'] && newStatus == 'cancelled') ||
+             ((oldStatus == 'review' || hasPendingDraft) && newStatus in ['revision', 'completed']);
+    }
+
+    // Admin dropdown in OrderDetailModal allows transitioning to any valid OrderStatus
+    function isValidAdminStatusTransition(newStatus) {
+      return newStatus in [
+        'pending_quote', 'quoted', 'in_queue', 'designing',
+        'review', 'revision', 'completed', 'cancelled'
+      ];
+    }
+
+    function isValidOrderUpdate(oldData, newData, orderId, adminActor) {
+      return isValidOrderBase(newData, orderId) &&
+             areImmutableFieldsUnchanged(['createdAt']) &&
+             (!('id' in oldData) || ('id' in newData && newData.id == oldData.id)) &&
+             (newData.fileFormats == oldData.fileFormats ||
+              newData.fileFormats.size() == 0 ||
+              (newData.fileFormats[0] is string && newData.fileFormats[0].size() >= 1 && newData.fileFormats[0].size() <= 30)) &&
+             (newData.colorPalette == oldData.colorPalette ||
+              newData.colorPalette.size() == 0 ||
+              (newData.colorPalette[0] is string && newData.colorPalette[0].size() >= 1 && newData.colorPalette[0].size() <= 50)) &&
+             (newData.referenceImages == oldData.referenceImages ||
+              newData.referenceImages.size() == 0 ||
+              isValidReferenceImage(newData.referenceImages[newData.referenceImages.size() - 1])) &&
+             isValidDraftsOnUpdate(oldData.drafts, newData.drafts, oldData.status, adminActor) &&
+             isValidCommentsOnUpdate(oldData.comments, newData.comments, adminActor) &&
+             (
+               (
+                 adminActor &&
+                 isValidAdminStatusTransition(newData.status)
+               ) ||
+               (
+                 !adminActor &&
+                 // Customer cannot hijack customerId or tamper with admin-managed fields
+                 areImmutableFieldsUnchanged([
+                   'customerId', 'orderNumber', 'quotedPrice', 'quoteNote',
+                   'assignedDesigner', 'maxRevisions', 'finalDeliverableUrl',
+                   'finalPreviewImage', 'finalNote'
+                 ]) &&
+                 isValidCustomerStatusTransition(oldData, newData) &&
+                 // Customer cannot self-approve payment to 'paid' or alter once 'paid'
+                 (
+                   (oldData.paymentStatus == 'paid' &&
+                    areImmutableFieldsUnchanged(['paymentStatus', 'paymentSlipUrl', 'paymentPaidAt'])) ||
+                   (oldData.paymentStatus != 'paid' &&
+                    newData.paymentStatus in ['unpaid', 'pending_verification'])
+                 ) &&
+                 // Customer can only increment usedRevisions by +1 when requesting a revision
+                 (newData.usedRevisions == oldData.usedRevisions ||
+                  (newData.status == 'revision' &&
+                   newData.usedRevisions == oldData.usedRevisions + 1 &&
+                   newData.usedRevisions <= newData.maxRevisions))
+               )
+             );
+    }
+
+    // ===============================================================
+    // Domain Validators: Notification Settings
+    // ===============================================================
+
+    function isValidNotificationSettings(data) {
+      return hasOnlyAllowedFields(data, [
+               'enableSound', 'enableDesktop', 'telegramBotToken',
+               'telegramChatId', 'discordWebhookUrl', 'updatedAt'
+             ]) &&
+             hasRequiredFields(data, [
+               'enableSound', 'enableDesktop', 'telegramBotToken',
+               'telegramChatId', 'discordWebhookUrl', 'updatedAt'
+             ]) &&
+             data.enableSound is bool &&
+             data.enableDesktop is bool &&
+             data.telegramBotToken is string &&
+             data.telegramBotToken.size() <= 200 &&
+             data.telegramChatId is string &&
+             data.telegramChatId.size() <= 100 &&
+             data.discordWebhookUrl is string &&
+             data.discordWebhookUrl.size() <= 500 &&
+             (data.discordWebhookUrl == '' || data.discordWebhookUrl.matches("^https://.*")) &&
+             isValidDateString(data.updatedAt);
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    // Users collection: contains PII (email, contactInfo)
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow create: if isSignedIn() &&
+                       request.auth.uid == userId &&
+                       isValidUser(request.resource.data, userId);
+      allow update: if isSignedIn() &&
+                       request.auth.uid == userId &&
+                       isValidUser(request.resource.data, userId) &&
+                       areImmutableFieldsUnchanged(['uid', 'createdAt']);
+      allow delete: if isAdmin();
+    }
+
+    // Orders collection: customer-owned artwork orders managed by admins
+    match /orders/{orderId} {
+      allow read: if isSignedIn() &&
+                     (resource.data.customerId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() &&
+                       (request.resource.data.customerId == request.auth.uid || isAdmin()) &&
+                       isValidOrderCreate(request.resource.data, orderId);
+      allow update: if isSignedIn() &&
+                       (resource.data.customerId == request.auth.uid || isAdmin()) &&
+                       isValidOrderUpdate(resource.data, request.resource.data, orderId, isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // Settings collection: designer notification webhooks and alerts
+    match /settings/{settingId} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin() &&
+                               settingId == 'notifications' &&
+                               isValidNotificationSettings(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    // Default deny all other paths and subcollections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
