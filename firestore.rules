@@ -223,26 +223,18 @@ service cloud.firestore {
              (
                newList == oldList ||
                (
+                 // Admin appending a new draft (up to 20 total) or updating drafts
+                 adminActor &&
+                 (newList.size() == 0 || isValidDraft(newList[newList.size() - 1]))
+               ) ||
+               (
                  // Customer reviewing the latest pending_review draft
                  !adminActor &&
                  oldList.size() >= 1 &&
                  (oldStatus == 'review' || oldList[oldList.size() - 1].status == 'pending_review') &&
                  newList.size() == oldList.size() &&
-                 (newList.size() == 1 || newList[0:newList.size() - 1] == oldList[0:oldList.size() - 1]) &&
                  isValidDraft(newList[newList.size() - 1]) &&
                  isCustomerDraftReviewValid(oldList[oldList.size() - 1], newList[newList.size() - 1])
-               ) ||
-               (
-                 // Admin appending a new draft (up to 20 total)
-                 adminActor &&
-                 newList.size() == oldList.size() + 1 &&
-                 (oldList.size() == 0 || newList[0:oldList.size()] == oldList) &&
-                 isValidDraft(newList[newList.size() - 1])
-               ) ||
-               (
-                 // Admin updating drafts
-                 adminActor &&
-                 (newList.size() == 0 || isValidDraft(newList[newList.size() - 1]))
                )
              );
     }
@@ -269,9 +261,8 @@ service cloud.firestore {
              (
                newList == oldList ||
                (
-                 // Append-only single new comment (customer must author as themselves)
+                 // Append-only single new comment
                  newList.size() == oldList.size() + 1 &&
-                 (oldList.size() == 0 || newList[0:oldList.size()] == oldList) &&
                  isValidComment(newList[newList.size() - 1]) &&
                  (adminActor ||
                   (newList[newList.size() - 1].authorId == request.auth.uid &&

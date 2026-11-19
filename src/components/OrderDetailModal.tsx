@@ -138,6 +138,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         updatedAt: new Date().toISOString(),
       });
       showToast('อัปเดตสถานะและผู้รับผิดชอบงานเรียบร้อย');
+    } catch (err: unknown) {
+      showToast(`❌ ข้อผิดพลาด: ${(err as Error)?.message || 'ไม่สามารถอัปเดตได้'}`);
     } finally {
       setSaving(false);
     }
@@ -151,6 +153,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     try {
       await deleteDoc(orderRef);
       onClose();
+    } catch (err: unknown) {
+      showToast(`❌ ข้อผิดพลาด: ${(err as Error)?.message || 'ไม่สามารถลบออเดอร์ได้'}`);
     } finally {
       setSaving(false);
     }
@@ -174,6 +178,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       });
       if (order.status === 'pending_quote') setStatusInput('quoted');
       showToast('ส่งใบเสนอราคาให้ลูกค้าเรียบร้อยแล้ว');
+    } catch (err: unknown) {
+      showToast(`❌ ข้อผิดพลาด: ${(err as Error)?.message || 'ไม่สามารถส่งใบเสนอราคาได้'}`);
     } finally {
       setSaving(false);
     }
@@ -195,6 +201,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         `💳 [BriefBox] ลูกค้าแนบสลิปชำระเงินแล้ว!\n• รหัส: ${order.orderNumber} (${order.title})\n• ลูกค้า: ${order.customerName} (${order.customerBrand})\n• ยอดเสนอราคา: ฿${order.quotedPrice.toLocaleString()}`
       );
       showToast('แนบสลิปสำเร็จ! รอทีมงานตรวจสอบและรับเข้าคิวงาน');
+    } catch (err: unknown) {
+      showToast(`❌ ข้อผิดพลาด: ${(err as Error)?.message || 'ไม่สามารถอัปโหลดสลิปได้'}`);
     } finally {
       setUploadingSlip(false);
       e.target.value = '';
@@ -216,6 +224,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       });
       setStatusInput(nextStatus);
       showToast('ยืนยันยอดชำระเงินและนำงานเข้าคิวเรียบร้อย');
+    } catch (err: unknown) {
+      showToast(`❌ ข้อผิดพลาด: ${(err as Error)?.message || 'ไม่สามารถยืนยันยอดชำระได้'}`);
     } finally {
       setSaving(false);
     }
@@ -228,6 +238,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     try {
       const dataUrl = await compressImageToDataUrl(file, 1000, 0.78);
       setDraftImageUrl(dataUrl);
+    } catch (err: unknown) {
+      showToast(`❌ ข้อผิดพลาด: ${(err as Error)?.message || 'ไม่สามารถประมวลผลรูปภาพได้'}`);
     } finally {
       setUploadingDraftImg(false);
       e.target.value = '';
@@ -280,6 +292,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       setDraftExternalLink('');
       setDraftNote('');
       showToast(`ส่งดราฟต์ v${nextVersion} ให้ลูกค้าตรวจเรียบร้อย`);
+    } catch (err: unknown) {
+      showToast(`❌ ข้อผิดพลาด: ${(err as Error)?.message || 'ไม่สามารถส่งดราฟต์ได้'}`);
     } finally {
       setSaving(false);
     }
@@ -309,6 +323,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       );
       setStatusInput('completed');
       showToast('อนุมัติผลงานเรียบร้อย! สถานะเปลี่ยนเป็นเสร็จสมบูรณ์');
+    } catch (err: unknown) {
+      showToast(`❌ ข้อผิดพลาด: ${(err as Error)?.message || 'ไม่สามารถอนุมัติได้'}`);
     } finally {
       setSaving(false);
     }
@@ -354,6 +370,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       setShowRevisionForm(false);
       setRevisionComment('');
       showToast('ส่งคำขอแก้ไขงานให้ดีไซเนอร์เรียบร้อยแล้ว');
+    } catch (err: unknown) {
+      showToast(`❌ ข้อผิดพลาด: ${(err as Error)?.message || 'ไม่สามารถส่งคำขอแก้ไขได้'}`);
     } finally {
       setSaving(false);
     }
@@ -373,6 +391,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       });
       setStatusInput('completed');
       showToast('ส่งมอบไฟล์ไฟนอลและปิดงานเสร็จสมบูรณ์แล้ว');
+    } catch (err: unknown) {
+      showToast(`❌ ข้อผิดพลาด: ${(err as Error)?.message || 'ไม่สามารถส่งมอบงานได้'}`);
     } finally {
       setSaving(false);
     }
@@ -403,6 +423,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       }
       setChatMessage('');
       setChatAttachment('');
+    } catch (err: unknown) {
+      showToast(`❌ ข้อผิดพลาด: ${(err as Error)?.message || 'ไม่สามารถส่งข้อความได้'}`);
     } finally {
       setSaving(false);
     }
@@ -643,6 +665,25 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                       </button>
                     </div>
                   </div>
+
+                  {order.drafts.length === 0 && (
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-violet-300 bg-white p-3 text-xs text-violet-900 shadow-xs">
+                      <div>
+                        <span className="font-bold">🎨 ต้องการส่งไฟล์ภาพดราฟต์ให้ลูกค้าตรวจ?</span>
+                        <p className="text-[11px] text-violet-700">
+                          สามารถอัปโหลดรูปภาพงาน หรือวางลิงก์ Figma/Canva เพื่อให้ลูกค้าดูและกดอนุมัติได้ที่แท็บ "ส่งดราฟต์ & แก้งาน"
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('drafts')}
+                        className="inline-flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 font-bold text-white shadow-xs transition hover:bg-violet-700"
+                      >
+                        <ImageIcon className="h-3.5 w-3.5" />
+                        <span>ไปหน้าส่งดราฟต์ →</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1226,12 +1267,16 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-10 text-center">
                   <ImageIcon className="mx-auto h-9 w-9 text-slate-300" />
                   <p className="mt-2 text-sm font-bold text-slate-700">
-                    ยังไม่มีดราฟต์งานถูกส่งเข้ามา
+                    {order.status === 'review'
+                      ? 'กำลังจัดเตรียมไฟล์ดราฟต์ภาพ'
+                      : 'ยังไม่มีดราฟต์งานถูกส่งเข้ามา'}
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
                     {isAdmin
-                      ? 'สามารถอัปโหลดดราฟต์หรือกด "สร้างภาพตัวอย่างอัตโนมัติ" ด้านบนได้ทันที'
-                      : 'เมื่อดีไซเนอร์ออกแบบเสร็จ ดราฟต์ภาพจะแสดงที่นี่เพื่อให้คุณตรวจและสั่งแก้ไข'}
+                      ? 'คุณสามารถอัปโหลดภาพ หรือวางลิงก์ Figma/Canva/Drive ในกล่องแบบฟอร์มด้านบน แล้วกดปุ่ม "ส่งดราฟต์ v1 ให้ลูกค้าตรวจ" ได้เลยครับ'
+                      : order.status === 'review'
+                        ? 'ดีไซเนอร์กำลังอัปโหลดไฟล์ภาพดราฟต์เข้าระบบ เมื่อเสร็จแล้วภาพจะปรากฏที่นี่เพื่อให้คุณกดอนุมัติหรือขอแก้ไขครับ'
+                        : 'เมื่อดีไซเนอร์ออกแบบเสร็จ ดราฟต์ภาพจะแสดงที่นี่เพื่อให้คุณตรวจและสั่งแก้ไข'}
                   </p>
                 </div>
               ) : (
