@@ -198,12 +198,9 @@ service cloud.firestore {
              ]) &&
              d.version is number && d.version >= 1 && d.version <= 100 &&
              (d.imageUrl == '' || isValidImageOrWebUrl(d.imageUrl)) &&
-             (!('externalLink' in d) || (d.externalLink == '' || isValidWebUrl(d.externalLink))) &&
              d.designerNote is string && d.designerNote.size() <= 2000 &&
              isValidDateString(d.submittedAt) &&
-             d.status in ['pending_review', 'revision_requested', 'approved'] &&
-             (!('customerFeedback' in d) || (d.customerFeedback is string && d.customerFeedback.size() <= 2000)) &&
-             (!('reviewedAt' in d) || (d.reviewedAt == '' || isValidDateString(d.reviewedAt)));
+             d.status in ['pending_review', 'revision_requested', 'approved'];
     }
 
     function isCustomerDraftReviewValid(oldDraft, newDraft) {
@@ -212,9 +209,7 @@ service cloud.firestore {
              newDraft.version == oldDraft.version &&
              newDraft.imageUrl == oldDraft.imageUrl &&
              newDraft.designerNote == oldDraft.designerNote &&
-             newDraft.submittedAt == oldDraft.submittedAt &&
-             ((!('externalLink' in oldDraft) && !('externalLink' in newDraft)) ||
-              ('externalLink' in oldDraft && 'externalLink' in newDraft && newDraft.externalLink == oldDraft.externalLink));
+             newDraft.submittedAt == oldDraft.submittedAt;
     }
 
     function isValidDraftsOnUpdate(oldList, newList, oldStatus, adminActor) {
