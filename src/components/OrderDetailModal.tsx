@@ -35,6 +35,7 @@ import {
   UserProfile,
   isVideoOrder,
 } from '../types/briefbox';
+import { AiPromptAssistant } from './AiPromptAssistant';
 
 interface OrderDetailModalProps {
   order: ArtworkOrder;
@@ -695,6 +696,9 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 </div>
               )}
 
+              {/* AI Prompt Generator for Designers & Admins */}
+              {isStaff && <AiPromptAssistant order={order} />}
+
               {/* Specs Grid */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
@@ -1160,6 +1164,9 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                   </div>
                 </div>
               )}
+
+              {/* AI Prompt Generator for Designers & Admins */}
+              {isStaff && <AiPromptAssistant order={order} />}
 
               {/* Admin/Designer: Upload Draft & Deliver Final */}
               {isStaff && (
