@@ -14,6 +14,7 @@ import {
   Film,
   Clock,
   Volume2,
+  Building2,
 } from 'lucide-react';
 import { collection, addDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -175,6 +176,10 @@ export const NewBriefModal: React.FC<NewBriefModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!customerBrand.trim()) {
+      setErrorMsg('กรุณาระบุชื่อแบรนด์ / ร้านค้า เพื่อให้ดีไซเนอร์ไม่งานสับสน');
+      return;
+    }
     if (!title.trim()) {
       setErrorMsg(
         workCategory === 'video'
@@ -257,7 +262,7 @@ export const NewBriefModal: React.FC<NewBriefModalProps> = ({
       await addDoc(collection(db, 'orders'), newOrder);
       const icon = workCategory === 'video' ? '🎬' : '🎨';
       void sendExternalWebhookNotification(
-        `${icon} [BriefBox] มีออเดอร์ใหม่!\n• รหัส: ${newOrder.orderNumber}\n• ชื่องาน: ${newOrder.title}\n• ลูกค้า: ${newOrder.customerName} (${newOrder.customerBrand})\n• ประเภท: ${newOrder.artworkType} (${newOrder.dimensions})\n• กำหนดส่ง: ${newOrder.deadline} (${newOrder.urgency})`
+        `${icon} [BriefBox] มีออเดอร์ใหม่!\n• รหัส: ${newOrder.orderNumber}\n• แบรนด์: ${newOrder.customerBrand}\n• ชื่องาน: ${newOrder.title}\n• ลูกค้า: ${newOrder.customerName}\n• ประเภท: ${newOrder.artworkType} (${newOrder.dimensions})\n• กำหนดส่ง: ${newOrder.deadline} (${newOrder.urgency})`
       );
       onCreated(newOrder.title);
       onClose();
@@ -389,22 +394,40 @@ export const NewBriefModal: React.FC<NewBriefModalProps> = ({
               </h3>
             </div>
 
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold text-slate-700">
-                {isVideo ? 'ชื่องานวิดีโอ / โปรเจกต์ *' : 'ชื่องาน Artwork / โปรเจกต์ *'}
-              </label>
-              <input
-                type="text"
-                required
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder={
-                  isVideo
-                    ? 'เช่น คลิปสั้น TikTok รีวิวสินค้าโปร 11.11, วิดีโอโฆษณายิงแอด Facebook Reels'
-                    : 'เช่น แบนเนอร์โปรโมชั่น 11.11 ลด 50%, โปสเตอร์เมนูใหม่ Matcha Latte'
-                }
-                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15"
-              />
+            {/* Brand & Project Title */}
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  <Building2 className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                  <span>ชื่อแบรนด์ / ร้านค้า *</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={customerBrand}
+                  onChange={(e) => setCustomerBrand(e.target.value)}
+                  placeholder="เช่น Bloom Cafe, Cozy Home, LionkingB"
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 dark:placeholder-slate-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  {isVideo ? 'ชื่องานวิดีโอ / โปรเจกต์ *' : 'ชื่องาน Artwork / โปรเจกต์ *'}
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder={
+                    isVideo
+                      ? 'เช่น คลิปสั้น TikTok รีวิวสินค้าโปร 11.11, วิดีโอโฆษณา Reels'
+                      : 'เช่น แบนเนอร์โปรโมชั่น 11.11 ลด 50%, โปสเตอร์เมนูใหม่'
+                  }
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 dark:placeholder-slate-500"
+                />
+              </div>
             </div>
 
             <div>
