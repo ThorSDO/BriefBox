@@ -29,6 +29,7 @@ import {
   onSnapshot,
   query,
   setDoc,
+  updateDoc,
   where,
 } from 'firebase/firestore';
 import { auth, db } from './lib/firebase';
@@ -50,6 +51,8 @@ import {
   OrderStatus,
   URGENCY_META,
   UserProfile,
+  UserRole,
+  USER_ROLE_META,
   isVideoOrder,
 } from './types/briefbox';
 
@@ -250,8 +253,9 @@ export function App() {
     setFirestoreError('');
 
     const ordersCol = collection(db, 'orders');
+    const isStaff = profile.role === 'admin' || profile.role === 'designer';
     const q =
-      profile.role === 'admin'
+      isStaff
         ? query(ordersCol)
         : query(ordersCol, where('customerId', '==', profile.uid));
 
@@ -524,6 +528,30 @@ export function App() {
     }
   };
 
+  const handleToggleUserRole = async (targetUser: UserProfile) => {
+    if (!profile || profile.role !== 'admin' || targetUser.uid === profile.uid) return;
+    const nextRole: UserRole = targetUser.role === 'designer' ? 'customer' : 'designer';
+    const roleLabel = nextRole === 'designer' ? 'ดีไซเนอร์ทีมงาน' : 'ลูกค้าทั่วไป';
+    if (
+      !window.confirm(
+        `ต้องการเปลี่ยนสิทธิ์ของ "${targetUser.displayName}" เป็น "${roleLabel}" ใช่หรือไม่?`
+      )
+    ) {
+      return;
+    }
+    try {
+      await updateDoc(doc(db, 'users', targetUser.uid), { role: nextRole });
+      setAllUsers((prev) =>
+        prev.map((item) =>
+          item.uid === targetUser.uid ? { ...item, role: nextRole } : item
+        )
+      );
+      showNotice(`อัปเดตสิทธิ์ของ ${targetUser.displayName} เป็น "${roleLabel}" สำเร็จ`);
+    } catch (err: unknown) {
+      alert((err as Error)?.message || 'ไม่สามารถเปลี่ยนสิทธิ์สมาชิกได้');
+    }
+  };
+
   const handleSignOut = async () => {
     await signOut(auth);
     setSelectedOrderId(null);
@@ -541,8 +569,9 @@ export function App() {
 
   // Filtered orders
   const filteredOrders = useMemo(() => {
+    const isStaff = profile?.role === 'admin' || profile?.role === 'designer';
     return orders.filter((order) => {
-      if (profile?.role === 'admin' && customerFilter !== 'all') {
+      if (isStaff && customerFilter !== 'all') {
         if (order.customerBrand !== customerFilter) return false;
       }
 
@@ -570,10 +599,10 @@ export function App() {
 
   // KPI summary
   const kpis = useMemo(() => {
-    const isAdmin = profile?.role === 'admin';
+    const isStaff = profile?.role === 'admin' || profile?.role === 'designer';
     const total = orders.length;
     const actionRequired = orders.filter((o) =>
-      isAdmin
+      isStaff
         ? o.status === 'pending_quote' ||
         o.status === 'revision' ||
         o.paymentStatus === 'pending_verification'
@@ -625,7 +654,8 @@ export function App() {
     const urgencyMeta = URGENCY_META[order.urgency];
     const latestDraft =
       order.drafts.length > 0 ? order.drafts[order.drafts.length - 1] : null;
-    const needsMyAction = isAdmin
+    const isStaff = profile.role === 'admin' || profile.role === 'designer';
+    const needsMyAction = isStaff
       ? order.status === 'pending_quote' ||
       order.status === 'revision' ||
       order.paymentStatus === 'pending_verification'
@@ -1062,15 +1092,18 @@ export function App() {
                             {u.displayName}
                           </span>
                           <span
-                            className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold ${u.role === 'admin'
-                                ? 'bg-violet-100 text-violet-700'
-                                : 'bg-sky-100 text-sky-700'
-                              }`}
+                            className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold ${
+                              USER_ROLE_META[u.role]?.badgeClass ||
+                              'bg-slate-100 text-slate-700'
+                            }`}
                           >
                             {u.role === 'admin' && (
                               <ShieldCheck className="h-3 w-3" />
                             )}
-                            {u.role === 'admin' ? 'แอดมิน' : 'ลูกค้า'}
+                            {u.role === 'designer' && (
+                              <Palette className="h-3 w-3" />
+                            )}
+                            {USER_ROLE_META[u.role]?.label || u.role}
                           </span>
                         </div>
                         <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
@@ -1096,6 +1129,26 @@ export function App() {
                         <div className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700">
                           {userOrderCount} งาน
                         </div>
+                        {u.uid !== profile.uid && u.role !== 'admin' && (
+                          <button
+                            type="button"
+                            onClick={() => handleToggleUserRole(u)}
+                            className={`rounded-xl border px-2.5 py-1 text-xs font-semibold transition ${
+                              u.role === 'designer'
+                                ? 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
+                                : 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                            }`}
+                            title={
+                              u.role === 'designer'
+                                ? 'เปลี่ยนเป็นลูกค้าทั่วไป'
+                                : 'เลื่อนขั้นเป็นดีไซเนอร์ทีมงาน'
+                            }
+                          >
+                            {u.role === 'designer'
+                              ? 'เปลี่ยนเป็นลูกค้า'
+                              : '+ ตั้งเป็นดีไซเนอร์'}
+                          </button>
+                        )}
                         {u.uid !== profile.uid && (
                           <button
                             type="button"

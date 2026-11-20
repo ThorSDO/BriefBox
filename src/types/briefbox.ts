@@ -1,4 +1,22 @@
-export type UserRole = 'customer' | 'admin';
+export type UserRole = 'customer' | 'designer' | 'admin';
+
+export const USER_ROLE_META: Record<
+  UserRole,
+  { label: string; badgeClass: string }
+> = {
+  admin: {
+    label: 'แอดมิน (เจ้าของสตูดิโอ)',
+    badgeClass: 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300',
+  },
+  designer: {
+    label: 'ดีไซเนอร์ทีมงาน',
+    badgeClass: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300',
+  },
+  customer: {
+    label: 'ลูกค้า',
+    badgeClass: 'bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300',
+  },
+};
 
 export interface UserProfile {
   uid: string;

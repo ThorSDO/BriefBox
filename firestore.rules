@@ -12,13 +12,13 @@ service cloud.firestore {
     // Collection: users
     // Document ID: {userId} (must match Firebase Auth UID)
     // Fields:
-    //   - uid: string (required, immutable, must equal {userId} and request.auth.uid)
+    //   - uid: string (required, immutable, must equal {userId})
     //   - email: string (required, valid email format or empty string, max 254 chars)
     //   - displayName: string (required, max 120 chars)
     //   - brandName: string (required, max 120 chars)
     //   - contactInfo: string (required, max 300 chars)
-    //   - role: string (required, enum: 'customer' | 'admin'; 'admin' restricted to
-    //     designated studio admin emails)
+    //   - role: string (required, enum: 'customer' | 'designer' | 'admin'; 'admin' restricted to
+    //     designated studio admin emails or existing admin; 'designer' assigned by admin)
     //   - createdAt: string (required, immutable, ISO-8601 datetime string)
     //
     // Collection: settings
@@ -35,8 +35,8 @@ service cloud.firestore {
     // Document ID: {orderId}
     // Fields:
     //   - id: string (optional, immutable if present, must equal {orderId})
-    //   - orderNumber: string (required, immutable for non-admin, 1..40 chars)
-    //   - customerId: string (required, immutable for non-admin, 1..128 chars)
+    //   - orderNumber: string (required, immutable for non-staff, 1..40 chars)
+    //   - customerId: string (required, immutable for non-staff, 1..128 chars)
     //   - customerName: string (required, max 120 chars)
     //   - customerBrand: string (required, max 120 chars)
     //   - customerContact: string (required, max 300 chars)
@@ -53,20 +53,20 @@ service cloud.firestore {
     //   - referenceImages: list<map> (required, max 6 items; each has id, name, dataUrl)
     //   - deadline: string (required, empty or YYYY-MM-DD / ISO datetime, max 40 chars)
     //   - urgency: string (required, enum: 'normal' | 'urgent' | 'express')
-    //   - maxRevisions: number (required, immutable for non-admin, 0..100)
+    //   - maxRevisions: number (required, immutable for non-staff, 0..100)
     //   - usedRevisions: number (required, 0..100; customer can only increment +1 on revision)
     //   - status: string (required, enum: 'pending_quote' | 'quoted' | 'in_queue' |
     //             'designing' | 'review' | 'revision' | 'completed' | 'cancelled')
-    //   - assignedDesigner: string (required, admin-managed, max 120 chars)
-    //   - quotedPrice: number (required, admin-managed, 0..10000000)
-    //   - quoteNote: string (required, admin-managed, max 2000 chars)
+    //   - assignedDesigner: string (required, staff-managed, max 120 chars)
+    //   - quotedPrice: number (required, staff-managed, 0..10000000)
+    //   - quoteNote: string (required, staff-managed, max 2000 chars)
     //   - paymentStatus: string (required, enum: 'unpaid' | 'pending_verification' | 'paid')
     //   - paymentSlipUrl: string (required, empty or image/web URL, max 900000 chars)
     //   - paymentPaidAt: string (required, empty or ISO datetime, max 40 chars)
     //   - drafts: list<map> (required, max 20 items; ArtworkDraft shape)
-    //   - finalDeliverableUrl: string (required, admin-managed, empty or image/web URL)
-    //   - finalPreviewImage: string (required, admin-managed, empty or image/web URL)
-    //   - finalNote: string (required, admin-managed, max 2000 chars)
+    //   - finalDeliverableUrl: string (required, staff-managed, empty or image/web URL)
+    //   - finalPreviewImage: string (required, staff-managed, empty or image/web URL)
+    //   - finalNote: string (required, staff-managed, max 2000 chars)
     //   - comments: list<map> (required, max 100 items; OrderComment shape)
     //   - createdAt: string (required, immutable, ISO-8601 datetime string)
     //   - updatedAt: string (required, ISO-8601 datetime string)
@@ -92,6 +92,16 @@ service cloud.firestore {
              (isDesignatedAdminEmail() ||
               (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
                get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+    }
+
+    function isDesigner() {
+      return isSignedIn() &&
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'designer';
+    }
+
+    function isStaff() {
+      return isAdmin() || isDesigner();
     }
 
     function hasRequiredFields(data, fields) {
@@ -163,7 +173,6 @@ service cloud.firestore {
              data.uid.size() >= 1 &&
              data.uid.size() <= 128 &&
              data.uid == userId &&
-             data.uid == request.auth.uid &&
              data.email is string &&
              data.email.size() <= 254 &&
              (data.email == '' || isValidEmail(data.email)) &&
@@ -173,8 +182,8 @@ service cloud.firestore {
              data.brandName.size() <= 120 &&
              data.contactInfo is string &&
              data.contactInfo.size() <= 300 &&
-             data.role is string &&
-             (data.role == 'customer' || (data.role == 'admin' && isDesignatedAdminEmail())) &&
+             data.role in ['customer', 'designer', 'admin'] &&
+             (data.role != 'admin' || isDesignatedAdminEmail() || isAdmin()) &&
              isValidDateString(data.createdAt);
     }
 
@@ -219,19 +228,19 @@ service cloud.firestore {
              (!('externalLink' in oldDraft) || newDraft.externalLink == oldDraft.externalLink);
     }
 
-    function isValidDraftsOnUpdate(oldList, newList, oldStatus, adminActor) {
+    function isValidDraftsOnUpdate(oldList, newList, oldStatus, staffActor) {
       return newList is list &&
              newList.size() <= 20 &&
              (
                newList == oldList ||
                (
-                 // Admin appending a new draft (up to 20 total) or updating drafts
-                 adminActor &&
+                 // Staff appending a new draft (up to 20 total) or updating drafts
+                 staffActor &&
                  (newList.size() == 0 || isValidDraft(newList[newList.size() - 1]))
                ) ||
                (
                  // Customer reviewing the latest pending_review draft
-                 !adminActor &&
+                 !staffActor &&
                  oldList.size() >= 1 &&
                  (oldStatus == 'review' || oldList[oldList.size() - 1].status == 'pending_review') &&
                  newList.size() == oldList.size() &&
@@ -251,18 +260,18 @@ service cloud.firestore {
              c.id is string && c.id.size() >= 1 && c.id.size() <= 100 &&
              c.authorId is string && c.authorId.size() >= 1 && c.authorId.size() <= 128 &&
              c.authorName is string && c.authorName.size() >= 1 && c.authorName.size() <= 120 &&
-             c.authorRole in ['customer', 'admin'] &&
+             c.authorRole in ['customer', 'designer', 'admin'] &&
              c.message is string && c.message.size() <= 2000 &&
              (!('attachmentUrl' in c) || (c.attachmentUrl is string && (c.attachmentUrl == '' || isValidImageOrWebUrl(c.attachmentUrl)))) &&
              isValidDateString(c.createdAt);
     }
 
-    function isValidCommentsOnUpdate(oldList, newList, adminActor) {
+    function isValidCommentsOnUpdate(oldList, newList, staffActor) {
       return newList is list &&
              newList.size() <= 100 &&
              (
                newList == oldList ||
-               adminActor ||
+               staffActor ||
                (
                  newList.size() >= oldList.size() &&
                  isValidComment(newList[newList.size() - 1]) &&
@@ -356,8 +365,8 @@ service cloud.firestore {
              ((oldStatus == 'review' || hasPendingDraft) && newStatus in ['revision', 'completed']);
     }
 
-    // Admin dropdown in OrderDetailModal allows transitioning to any valid OrderStatus
-    function isValidAdminStatusTransition(newStatus) {
+    // Staff dropdown in OrderDetailModal allows transitioning to any valid OrderStatus
+    function isValidStaffStatusTransition(newStatus) {
       return newStatus in [
         'pending_quote', 'quoted', 'in_queue', 'designing',
         'review', 'revision', 'completed', 'cancelled'
@@ -365,7 +374,7 @@ service cloud.firestore {
     }
 
     // High-performance delta validator for updates to stay strictly within the 1000 CEL expression limit
-    function isValidOrderUpdate(oldData, newData, orderId, adminActor) {
+    function isValidOrderUpdate(oldData, newData, orderId, staffActor) {
       let affected = request.resource.data.diff(resource.data).affectedKeys();
       return hasOnlyAllowedFields(newData, [
                'id', 'orderNumber', 'customerId', 'customerName', 'customerBrand',
@@ -391,8 +400,8 @@ service cloud.firestore {
              !affected.hasAny(['createdAt']) &&
              (!('id' in oldData) || !affected.hasAny(['id'])) &&
              (!('id' in newData) || newData.id == orderId) &&
-             // Admin-managed fields (immutable for customer / non-admin):
-             (adminActor || !affected.hasAny([
+             // Staff-managed fields (immutable for customer / non-staff):
+             (staffActor || !affected.hasAny([
                'customerId', 'orderNumber', 'quotedPrice', 'quoteNote',
                'assignedDesigner', 'maxRevisions', 'finalDeliverableUrl',
                'finalPreviewImage', 'finalNote'
@@ -401,23 +410,23 @@ service cloud.firestore {
              (!affected.hasAny(['updatedAt']) || isValidDateString(newData.updatedAt)) &&
              // Status transitions:
              (!affected.hasAny(['status']) ||
-               (adminActor ? isValidAdminStatusTransition(newData.status) : isValidCustomerStatusTransition(oldData, newData))) &&
+               (staffActor ? isValidStaffStatusTransition(newData.status) : isValidCustomerStatusTransition(oldData, newData))) &&
              // Revisions counter:
              (!affected.hasAny(['usedRevisions']) ||
-               (adminActor ?
+               (staffActor ?
                  (newData.usedRevisions is number && newData.usedRevisions >= 0 && newData.usedRevisions <= 100) :
                  (newData.status == 'revision' &&
                   newData.usedRevisions == oldData.usedRevisions + 1 &&
                   newData.usedRevisions <= oldData.maxRevisions))) &&
              // Drafts:
              (!affected.hasAny(['drafts']) ||
-               isValidDraftsOnUpdate(oldData.drafts, newData.drafts, oldData.status, adminActor)) &&
+               isValidDraftsOnUpdate(oldData.drafts, newData.drafts, oldData.status, staffActor)) &&
              // Comments:
              (!affected.hasAny(['comments']) ||
-               isValidCommentsOnUpdate(oldData.comments, newData.comments, adminActor)) &&
+               isValidCommentsOnUpdate(oldData.comments, newData.comments, staffActor)) &&
              // Payment fields:
              (!affected.hasAny(['paymentStatus', 'paymentSlipUrl', 'paymentPaidAt']) ||
-               (adminActor ?
+               (staffActor ?
                  (newData.paymentStatus in ['unpaid', 'pending_verification', 'paid'] &&
                   (newData.paymentSlipUrl == '' || isValidImageOrWebUrl(newData.paymentSlipUrl)) &&
                   (newData.paymentPaidAt == '' || isValidDateString(newData.paymentPaidAt))) :
@@ -425,8 +434,8 @@ service cloud.firestore {
                   newData.paymentStatus in ['unpaid', 'pending_verification'] &&
                   (newData.paymentSlipUrl == '' || isValidImageOrWebUrl(newData.paymentSlipUrl)) &&
                   (newData.paymentPaidAt == '' || isValidDateString(newData.paymentPaidAt))))) &&
-             // Admin-managed field values when edited by admin:
-             (!adminActor || (
+             // Staff-managed field values when edited by staff:
+             (!staffActor || (
                (!affected.hasAny(['quotedPrice']) || (newData.quotedPrice is number && newData.quotedPrice >= 0 && newData.quotedPrice <= 10000000)) &&
                (!affected.hasAny(['quoteNote']) || (newData.quoteNote is string && newData.quoteNote.size() <= 2000)) &&
                (!affected.hasAny(['assignedDesigner']) || (newData.assignedDesigner is string && newData.assignedDesigner.size() <= 120)) &&
@@ -502,34 +511,42 @@ service cloud.firestore {
 
     // Users collection: contains PII (email, contactInfo)
     match /users/{userId} {
-      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow read: if isSignedIn() && (request.auth.uid == userId || isStaff());
       allow create: if isSignedIn() &&
-                       request.auth.uid == userId &&
-                       isValidUser(request.resource.data, userId);
+                       (request.auth.uid == userId || isAdmin()) &&
+                       isValidUser(request.resource.data, userId) &&
+                       (request.resource.data.role == 'customer' || isDesignatedAdminEmail() || isAdmin());
       allow update: if isSignedIn() &&
-                       request.auth.uid == userId &&
+                       (
+                         isAdmin() ||
+                         (
+                           request.auth.uid == userId &&
+                           (request.resource.data.role == resource.data.role ||
+                            (request.resource.data.role == 'admin' && isDesignatedAdminEmail()))
+                         )
+                       ) &&
                        isValidUser(request.resource.data, userId) &&
                        areImmutableFieldsUnchanged(['uid', 'createdAt']);
       allow delete: if isAdmin();
     }
 
-    // Orders collection: customer-owned artwork orders managed by admins
+    // Orders collection: customer-owned artwork orders managed by studio staff
     match /orders/{orderId} {
       allow get: if isSignedIn() &&
-                    ((resource != null && resource.data.customerId == request.auth.uid) || isAdmin());
+                    ((resource != null && resource.data.customerId == request.auth.uid) || isStaff());
       allow list: if isSignedIn() &&
-                     ((resource != null && resource.data.customerId == request.auth.uid) || isAdmin());
+                     ((resource != null && resource.data.customerId == request.auth.uid) || isStaff());
       allow create: if isSignedIn() &&
-                       ((request.resource.data.customerId == request.auth.uid) || isAdmin()) &&
+                       ((request.resource.data.customerId == request.auth.uid) || isStaff()) &&
                        isValidOrderCreate(request.resource.data, orderId);
       allow update: if isSignedIn() &&
-                       ((resource != null && resource.data.customerId == request.auth.uid) || isAdmin()) &&
+                       ((resource != null && resource.data.customerId == request.auth.uid) || isStaff()) &&
                        isValidOrderUpdate(resource.data, request.resource.data, orderId,
-                         isDesignatedAdminEmail() || (resource.data.customerId != request.auth.uid && isAdmin()));
+                         isDesignatedAdminEmail() || (resource.data.customerId != request.auth.uid && isStaff()));
       allow delete: if isAdmin();
     }
 
-    // Settings collection: designer notification webhooks and alerts
+    // Settings collection: studio notification webhooks and alerts (admin only)
     match /settings/{settingId} {
       allow read: if isSignedIn();
       allow create, update: if isAdmin() &&
@@ -541,6 +558,6 @@ service cloud.firestore {
     // Default deny all other paths and subcollections
     match /{document=**} {
       allow read, write: if false;
-    }
+      }
   }
 }

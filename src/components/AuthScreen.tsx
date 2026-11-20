@@ -125,9 +125,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         const snap = await getDoc(userRef);
         if (snap.exists()) {
           const existing = snap.data() as UserProfile;
-          if (existing.role !== resolvedRole) {
-            await updateDoc(userRef, { role: resolvedRole });
-            onAuthSuccess({ ...existing, role: resolvedRole });
+          if (resolvedRole === 'admin' && existing.role !== 'admin') {
+            await updateDoc(userRef, { role: 'admin' });
+            onAuthSuccess({ ...existing, role: 'admin' });
           } else {
             onAuthSuccess(existing);
           }

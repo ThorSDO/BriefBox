@@ -38,6 +38,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenNotificationSettings,
 }) => {
   const isAdmin = profile.role === 'admin';
+  const isDesigner = profile.role === 'designer';
+  const isStaff = isAdmin || isDesigner;
   const [notifOpen, setNotifOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -75,7 +77,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             <p className="text-xs text-slate-500">
               {isAdmin
                 ? 'ศูนย์บริหารคิวงานกราฟิก & แจ้งเตือนคำสั่งงานลูกค้า'
-                : 'ระบบสั่งงาน ตรวจดราฟต์ และติดตามคิว Artwork'}
+                : isDesigner
+                  ? 'พื้นที่ทำงานดีไซเนอร์: รับงาน ส่งดราฟต์ และตอบแชตลูกค้า'
+                  : 'ระบบสั่งงาน ตรวจดราฟต์ และติดตามคิว Artwork'}
             </p>
           </div>
         </div>
@@ -105,7 +109,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </button>
 
-          {isAdmin && (
+          {isStaff && (
             <>
               {/* Notification Bell Dropdown */}
               <div className="relative" ref={dropdownRef}>
@@ -224,15 +228,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                 )}
               </div>
 
-              <button
-                type="button"
-                onClick={onOpenNotificationSettings}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 transition hover:bg-violet-100"
-                title="ตั้งค่าแจ้งเตือนนักออกแบบ"
-              >
-                <Settings className="h-3.5 w-3.5" />
-                <span className="hidden md:inline">ตั้งค่าแจ้งเตือน</span>
-              </button>
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={onOpenNotificationSettings}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 transition hover:bg-violet-100"
+                  title="ตั้งค่าแจ้งเตือนนักออกแบบ"
+                >
+                  <Settings className="h-3.5 w-3.5" />
+                  <span className="hidden md:inline">ตั้งค่าแจ้งเตือน</span>
+                </button>
+              )}
             </>
           )}
 
@@ -253,11 +259,15 @@ export const Navbar: React.FC<NavbarProps> = ({
               className={`flex h-7 w-7 items-center justify-center rounded-lg ${
                 isAdmin
                   ? 'bg-violet-600 text-white'
-                  : 'bg-indigo-100 text-indigo-700'
+                  : isDesigner
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-indigo-100 text-indigo-700'
               }`}
             >
               {isAdmin ? (
                 <ShieldCheck className="h-4 w-4" />
+              ) : isDesigner ? (
+                <Palette className="h-4 w-4" />
               ) : (
                 <UserIcon className="h-4 w-4" />
               )}
@@ -271,10 +281,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                   className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
                     isAdmin
                       ? 'bg-violet-100 text-violet-700'
-                      : 'bg-sky-100 text-sky-700'
+                      : isDesigner
+                        ? 'bg-indigo-100 text-indigo-700'
+                        : 'bg-sky-100 text-sky-700'
                   }`}
                 >
-                  {isAdmin ? 'นักออกแบบ / แอดมิน' : 'ลูกค้า'}
+                  {isAdmin ? 'แอดมิน (เจ้าของ)' : isDesigner ? 'ดีไซเนอร์' : 'ลูกค้า'}
                 </span>
               </div>
               <p className="max-w-[140px] truncate text-[11px] text-slate-500">

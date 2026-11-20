@@ -65,6 +65,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   onClose,
 }) => {
   const isAdmin = profile.role === 'admin';
+  const isDesigner = profile.role === 'designer';
+  const isStaff = isAdmin || isDesigner;
   const [activeTab, setActiveTab] = useState<DetailTab>('brief');
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -611,21 +613,25 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           {/* TAB 1: BRIEF DETAILS */}
           {activeTab === 'brief' && (
             <div className="space-y-6">
-              {isAdmin && (
+              {isStaff && (
                 <div className="rounded-2xl border border-violet-200 bg-violet-50/70 p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                     <h3 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-violet-900">
                       <UserCheck className="h-4 w-4" />
-                      เครื่องมือแอดมิน: อัปเดตคิวงาน & มอบหมายดีไซเนอร์
+                      {isAdmin
+                        ? 'เครื่องมือแอดมิน: อัปเดตคิวงาน & มอบหมายดีไซเนอร์'
+                        : 'เครื่องมือดีไซเนอร์: อัปเดตคิวงาน & รับผิดชอบงาน'}
                     </h3>
-                    <button
-                      type="button"
-                      onClick={handleAdminDeleteOrder}
-                      className="inline-flex items-center gap-1 rounded-lg bg-rose-50 px-2.5 py-1 text-[11px] font-semibold text-rose-600 hover:bg-rose-100"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      ลบออเดอร์
-                    </button>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={handleAdminDeleteOrder}
+                        className="inline-flex items-center gap-1 rounded-lg bg-rose-50 px-2.5 py-1 text-[11px] font-semibold text-rose-600 hover:bg-rose-100"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        ลบออเดอร์
+                      </button>
+                    )}
                   </div>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <div>
@@ -959,13 +965,13 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                   </div>
                 )}
 
-                {isAdmin && (
+                {isStaff && (
                   <form
                     onSubmit={handleAdminSendQuote}
                     className="mt-5 space-y-3 border-t border-slate-100 pt-4"
                   >
                     <h4 className="text-xs font-bold text-violet-800">
-                      [แอดมิน] กำหนด / แก้ไขใบเสนอราคา
+                      [{isAdmin ? 'แอดมิน' : 'ดีไซเนอร์'}] กำหนด / แก้ไขใบเสนอราคา
                     </h4>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
@@ -1069,7 +1075,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                   </div>
                 )}
 
-                {isAdmin && order.paymentStatus !== 'paid' && (
+                {isStaff && order.paymentStatus !== 'paid' && (
                   <button
                     type="button"
                     disabled={saving}
@@ -1077,7 +1083,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                     className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
                   >
                     <CheckCircle2 className="h-4 w-4" />
-                    <span>ยืนยันรับยอดชำระ & นำเข้าคิวงาน (In Queue)</span>
+                    <span>[{isAdmin ? 'แอดมิน' : 'ดีไซเนอร์'}] ยืนยันรับยอดชำระ & นำเข้าคิวงาน (In Queue)</span>
                   </button>
                 )}
 
@@ -1155,8 +1161,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 </div>
               )}
 
-              {/* Admin: Upload Draft & Deliver Final */}
-              {isAdmin && (
+              {/* Admin/Designer: Upload Draft & Deliver Final */}
+              {isStaff && (
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                   <form
                     onSubmit={handleAdminSubmitDraft}
@@ -1289,7 +1295,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                       : 'ยังไม่มีดราฟต์งานถูกส่งเข้ามา'}
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
-                    {isAdmin
+                    {isStaff
                       ? 'คุณสามารถอัปโหลดภาพ หรือวางลิงก์ Figma/Canva/Drive ในกล่องแบบฟอร์มด้านบน แล้วกดปุ่ม "ส่งดราฟต์ v1 ให้ลูกค้าตรวจ" ได้เลยครับ'
                       : order.status === 'review'
                         ? 'ดีไซเนอร์กำลังอัปโหลดไฟล์ภาพดราฟต์เข้าระบบ เมื่อเสร็จแล้วภาพจะปรากฏที่นี่เพื่อให้คุณกดอนุมัติหรือขอแก้ไขครับ'
