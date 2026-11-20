@@ -60,6 +60,9 @@ html.dark .bg-white\/80 {
 html.dark .bg-slate-50 {
   background-color: #0b0f19;
 }
+html.dark .bg-slate-50\/80 {
+  background-color: rgba(30, 41, 59, 0.7);
+}
 html.dark .bg-slate-50\/70 {
   background-color: rgba(30, 41, 59, 0.55);
 }
@@ -171,10 +174,13 @@ html.dark .hover\:text-indigo-800:hover {
 
 html.dark .bg-violet-50,
 html.dark .bg-violet-50\/70,
-html.dark .bg-violet-50\/50 {
+html.dark .bg-violet-50\/60,
+html.dark .bg-violet-50\/50,
+html.dark .bg-violet-50\/40 {
   background-color: rgba(124, 58, 237, 0.16);
 }
 html.dark .bg-violet-100,
+html.dark .bg-violet-100\/90,
 html.dark .hover\:bg-violet-100:hover,
 html.dark .hover\:bg-violet-50:hover {
   background-color: rgba(124, 58, 237, 0.25);

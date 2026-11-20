@@ -73,31 +73,31 @@ const KANBAN_COLUMNS: {
   statuses: OrderStatus[];
   accent: string;
 }[] = [
-  {
-    id: 'col-quote',
-    title: 'รอประเมิน / รอชำระ',
-    statuses: ['pending_quote', 'quoted'],
-    accent: 'border-t-amber-500',
-  },
-  {
-    id: 'col-design',
-    title: 'คิวงาน / กำลังออกแบบ',
-    statuses: ['in_queue', 'designing'],
-    accent: 'border-t-indigo-500',
-  },
-  {
-    id: 'col-review',
-    title: 'รอตรวจ / แก้ไข Revision',
-    statuses: ['review', 'revision'],
-    accent: 'border-t-violet-500',
-  },
-  {
-    id: 'col-done',
-    title: 'เสร็จสมบูรณ์',
-    statuses: ['completed'],
-    accent: 'border-t-emerald-500',
-  },
-];
+    {
+      id: 'col-quote',
+      title: 'รอประเมิน / รอชำระ',
+      statuses: ['pending_quote', 'quoted'],
+      accent: 'border-t-amber-500',
+    },
+    {
+      id: 'col-design',
+      title: 'คิวงาน / กำลังออกแบบ',
+      statuses: ['in_queue', 'designing'],
+      accent: 'border-t-indigo-500',
+    },
+    {
+      id: 'col-review',
+      title: 'รอตรวจ / แก้ไข Revision',
+      statuses: ['review', 'revision'],
+      accent: 'border-t-violet-500',
+    },
+    {
+      id: 'col-done',
+      title: 'เสร็จสมบูรณ์',
+      statuses: ['completed'],
+      accent: 'border-t-emerald-500',
+    },
+  ];
 
 export function App() {
   const [authReady, setAuthReady] = useState(false);
@@ -575,8 +575,8 @@ export function App() {
     const actionRequired = orders.filter((o) =>
       isAdmin
         ? o.status === 'pending_quote' ||
-          o.status === 'revision' ||
-          o.paymentStatus === 'pending_verification'
+        o.status === 'revision' ||
+        o.paymentStatus === 'pending_verification'
         : o.status === 'quoted' || o.status === 'review'
     ).length;
     const activeDesign = orders.filter(
@@ -627,19 +627,18 @@ export function App() {
       order.drafts.length > 0 ? order.drafts[order.drafts.length - 1] : null;
     const needsMyAction = isAdmin
       ? order.status === 'pending_quote' ||
-        order.status === 'revision' ||
-        order.paymentStatus === 'pending_verification'
+      order.status === 'revision' ||
+      order.paymentStatus === 'pending_verification'
       : order.status === 'quoted' || order.status === 'review';
 
     return (
       <div
         key={order.id}
         onClick={() => setSelectedOrderId(order.id)}
-        className={`group cursor-pointer rounded-2xl border bg-white p-4 shadow-xs transition hover:-translate-y-0.5 hover:shadow-md ${
-          needsMyAction
+        className={`group cursor-pointer rounded-2xl border bg-white p-4 shadow-xs transition hover:-translate-y-0.5 hover:shadow-md ${needsMyAction
             ? 'border-indigo-300 ring-2 ring-indigo-500/10'
             : 'border-slate-200'
-        }`}
+          }`}
       >
         <div className="flex items-start justify-between gap-2">
           <div className="flex flex-wrap items-center gap-1.5">
@@ -681,11 +680,10 @@ export function App() {
             {order.customerBrand || order.customerName}
           </span>
           <span
-            className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 ${
-              isVideoOrder(order.artworkType)
+            className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 ${isVideoOrder(order.artworkType)
                 ? 'border border-violet-200 bg-violet-50 font-semibold text-violet-700'
                 : 'bg-slate-50 text-slate-700'
-            }`}
+              }`}
           >
             {isVideoOrder(order.artworkType) && <Video className="h-3 w-3" />}
             <span>{order.artworkType}</span>
@@ -876,11 +874,10 @@ export function App() {
                   key={f.id}
                   type="button"
                   onClick={() => setStatusFilter(f.id)}
-                  className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
-                    statusFilter === f.id
+                  className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${statusFilter === f.id
                       ? 'bg-indigo-600 text-white'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70'
-                  }`}
+                    }`}
                 >
                   {f.label}
                 </button>
@@ -892,11 +889,10 @@ export function App() {
             <button
               type="button"
               onClick={() => setViewMode('kanban')}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
-                viewMode === 'kanban'
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${viewMode === 'kanban'
                   ? 'bg-white text-slate-900 shadow-xs'
                   : 'text-slate-500 hover:text-slate-800'
-              }`}
+                }`}
             >
               <Columns3 className="h-3.5 w-3.5" />
               กระดานสถานะ
@@ -904,11 +900,10 @@ export function App() {
             <button
               type="button"
               onClick={() => setViewMode('grid')}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
-                viewMode === 'grid'
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${viewMode === 'grid'
                   ? 'bg-white text-slate-900 shadow-xs'
                   : 'text-slate-500 hover:text-slate-800'
-              }`}
+                }`}
             >
               <LayoutGrid className="h-3.5 w-3.5" />
               มุมมองการ์ด
@@ -1067,11 +1062,10 @@ export function App() {
                             {u.displayName}
                           </span>
                           <span
-                            className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold ${
-                              u.role === 'admin'
+                            className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold ${u.role === 'admin'
                                 ? 'bg-violet-100 text-violet-700'
                                 : 'bg-sky-100 text-sky-700'
-                            }`}
+                              }`}
                           >
                             {u.role === 'admin' && (
                               <ShieldCheck className="h-3 w-3" />

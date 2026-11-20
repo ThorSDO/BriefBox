@@ -317,18 +317,18 @@ export const NewBriefModal: React.FC<NewBriefModalProps> = ({
           )}
 
           {/* Work Category Selector */}
-          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-1.5">
+          <div className="rounded-2xl border border-slate-200 bg-slate-100/80 p-1.5 dark:border-slate-800 dark:bg-slate-900/90">
             <div className="grid grid-cols-2 gap-2 text-xs font-bold">
               <button
                 type="button"
                 onClick={() => handleCategoryChange('graphic')}
                 className={`flex items-center justify-center gap-2 rounded-xl py-2.5 transition ${
                   !isVideo
-                    ? 'border border-indigo-200 bg-white text-indigo-700 shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'border border-indigo-200 bg-white text-indigo-700 shadow-xs dark:border-indigo-500/50 dark:bg-indigo-950/70 dark:text-indigo-300'
+                    : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
                 }`}
               >
-                <Palette className="h-4 w-4 text-indigo-600" />
+                <Palette className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
                 <span>🎨 งานภาพนิ่ง / กราฟิก (Graphic)</span>
               </button>
               <button
@@ -336,11 +336,11 @@ export const NewBriefModal: React.FC<NewBriefModalProps> = ({
                 onClick={() => handleCategoryChange('video')}
                 className={`flex items-center justify-center gap-2 rounded-xl py-2.5 transition ${
                   isVideo
-                    ? 'border border-violet-200 bg-white text-violet-700 shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'border border-violet-200 bg-white text-violet-700 shadow-xs dark:border-violet-500/50 dark:bg-violet-950/70 dark:text-violet-300'
+                    : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
                 }`}
               >
-                <Video className="h-4 w-4 text-violet-600" />
+                <Video className="h-4 w-4 text-violet-600 dark:text-violet-400" />
                 <span>🎬 งานวิดีโอ & โมชัน (Video / Reels)</span>
               </button>
             </div>
@@ -523,11 +523,11 @@ export const NewBriefModal: React.FC<NewBriefModalProps> = ({
 
             {/* Video-specific duration & audio preferences */}
             {isVideo && (
-              <div className="space-y-4 rounded-2xl border border-violet-100 bg-violet-50/40 p-4">
+              <div className="space-y-4 rounded-2xl border border-violet-200/80 bg-violet-50/50 p-4 dark:border-violet-900/60 dark:bg-violet-950/30">
                 {/* Duration */}
                 <div>
-                  <label className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-violet-900">
-                    <Clock className="h-3.5 w-3.5 text-violet-600" />
+                  <label className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-violet-800 dark:text-violet-300">
+                    <Clock className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
                     <span>ความยาววิดีโอที่ต้องการ</span>
                   </label>
                   <div className="flex flex-wrap gap-2">
@@ -539,7 +539,7 @@ export const NewBriefModal: React.FC<NewBriefModalProps> = ({
                         className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
                           videoDuration === dur
                             ? 'border-violet-600 bg-violet-600 text-white shadow-xs'
-                            : 'border-slate-200 bg-white text-slate-700 hover:bg-violet-50'
+                            : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
                         }`}
                       >
                         {dur}
@@ -551,7 +551,7 @@ export const NewBriefModal: React.FC<NewBriefModalProps> = ({
                       className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
                         videoDuration === 'custom'
                           ? 'border-violet-600 bg-violet-600 text-white shadow-xs'
-                          : 'border-slate-200 bg-white text-slate-700 hover:bg-violet-50'
+                          : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
                       }`}
                     >
                       กำหนดเอง
@@ -563,15 +563,15 @@ export const NewBriefModal: React.FC<NewBriefModalProps> = ({
                       value={customVideoDuration}
                       onChange={(e) => setCustomVideoDuration(e.target.value)}
                       placeholder="ระบุความยาว เช่น 45 วินาที หรือ ประมาณ 5 นาที"
-                      className="mt-2.5 w-full rounded-xl border border-violet-200 bg-white px-3.5 py-2 text-xs outline-none focus:border-violet-500"
+                      className="mt-2.5 w-full rounded-xl border border-violet-200 bg-white px-3.5 py-2 text-xs outline-none focus:border-violet-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder-slate-500"
                     />
                   )}
                 </div>
 
                 {/* Audio & Subtitles */}
                 <div>
-                  <label className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-violet-900">
-                    <Volume2 className="h-3.5 w-3.5 text-violet-600" />
+                  <label className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-violet-800 dark:text-violet-300">
+                    <Volume2 className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
                     <span>รูปแบบเสียง, ดนตรี และคำบรรยาย (เลือกได้มากกว่า 1)</span>
                   </label>
                   <div className="flex flex-wrap gap-2">
@@ -584,11 +584,11 @@ export const NewBriefModal: React.FC<NewBriefModalProps> = ({
                           onClick={() => toggleAudioOption(opt)}
                           className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
                             selected
-                              ? 'border-violet-600 bg-violet-100/90 text-violet-800'
-                              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                              ? 'border-violet-600 bg-violet-50 text-violet-700 dark:border-violet-500 dark:bg-violet-950/70 dark:text-violet-300'
+                              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
                           }`}
                         >
-                          {selected && <Check className="h-3.5 w-3.5 text-violet-700" />}
+                          {selected && <Check className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />}
                           <span>{opt}</span>
                         </button>
                       );
