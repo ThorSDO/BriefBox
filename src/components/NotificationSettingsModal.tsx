@@ -287,14 +287,24 @@ export const NotificationSettingsModal: React.FC<
               </h3>
             </div>
 
-            <div className="rounded-xl border border-sky-200 bg-sky-50/70 p-3 text-[11px] leading-relaxed text-sky-900">
-              <strong>วิธีตั้งค่า Telegram ฟรีใน 1 นาที:</strong>
-              <br />
-              1. ทักแชท <strong>@BotFather</strong> ใน Telegram แล้วพิมพ์{' '}
-              <code>/newbot</code> เพื่อรับ <strong>Bot Token</strong>
-              <br />
-              2. ทักแชท <strong>@userinfobot</strong> เพื่อดูเลข{' '}
-              <strong>Chat ID</strong> ของคุณ (และอย่าลืมกดปุ่ม Start ในบอทของคุณเอง 1 ครั้ง)
+            <div className="rounded-xl border border-sky-200 bg-sky-50/70 p-3 text-[11px] leading-relaxed text-sky-900 space-y-2 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200">
+              <div>
+                <strong className="text-sky-950 dark:text-sky-100">🎮 วิธีสร้าง Discord Webhook ใน 30 วินาที (แนะนำ):</strong>
+                <br />
+                1. ใน Discord ไปที่ห้องแชทที่ต้องการให้แจ้งเตือนเข้า กดรูปฟันเฟือง ⚙️ (Edit Channel)
+                <br />
+                2. เลือกเมนู <strong>Integrations</strong> (การรวมระบบ) → <strong>Webhooks</strong> → กด <strong>New Webhook</strong>
+                <br />
+                3. ตั้งชื่อบอทตามต้องการ แล้วกดปุ่ม <strong>Copy Webhook URL</strong> มาวางในช่องด้านล่างได้เลย!
+              </div>
+
+              <div className="pt-2 border-t border-sky-200/60 dark:border-sky-900/60">
+                <strong className="text-sky-950 dark:text-sky-100">📱 หรือ วิธีตั้งค่า Telegram ฟรี:</strong>
+                <br />
+                1. ทักแชท <strong>@BotFather</strong> ใน Telegram พิมพ์ <code>/newbot</code> เพื่อรับ <strong>Bot Token</strong>
+                <br />
+                2. ทักแชท <strong>@userinfobot</strong> เพื่อดูเลข <strong>Chat ID</strong> ของคุณ
+              </div>
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
