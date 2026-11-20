@@ -192,3 +192,87 @@ export const URGENCY_META: Record<
     badgeClass: 'bg-rose-50 text-rose-700 border border-rose-200',
   },
 };
+
+export const GRAPHIC_ARTWORK_TYPES = [
+  'Social Media Post',
+  'Banner / Ads',
+  'Logo / CI',
+  'Poster / สิ่งพิมพ์',
+  'Packaging',
+  'Rich Menu LINE OA',
+  'Infographic',
+  'อื่นๆ',
+] as const;
+
+export const VIDEO_ARTWORK_TYPES = [
+  'วิดีโอสั้น (TikTok / Reels / Shorts)',
+  'วิดีโอโฆษณา / ยิงแอด (Video Ads)',
+  'Motion Graphic / แอนิเมชัน',
+  'รีวิวสินค้า / แนะนำบริการ (Review)',
+  'YouTube / วิดีโอยาว (16:9)',
+  'วิดีโองานอีเวนต์ / Presentation',
+  'วิดีโออื่นๆ',
+] as const;
+
+export const GRAPHIC_DIMENSION_PRESETS = [
+  '1080x1080 px (1:1)',
+  '1080x1350 px (4:5)',
+  '1920x1080 px (16:9)',
+  '1080x1920 px (Story/Reels)',
+  '2500x1686 px (LINE Rich Menu)',
+  'A4 (210x297 mm)',
+] as const;
+
+export const VIDEO_DIMENSION_PRESETS = [
+  '1080x1920 px (9:16 แนวตั้ง - TikTok / Reels / Shorts)',
+  '1920x1080 px (16:9 แนวนอน - YouTube / จอใหญ่)',
+  '1080x1080 px (1:1 จัตุรัส - Video Feed Post)',
+  '1080x1350 px (4:5 แนวตั้ง - IG / Facebook Video)',
+] as const;
+
+export const GRAPHIC_FILE_FORMAT_OPTIONS = [
+  'PNG',
+  'JPG',
+  'PDF สำหรับพิมพ์',
+  'AI / PSD ต้นฉบับ',
+] as const;
+
+export const VIDEO_FILE_FORMAT_OPTIONS = [
+  'MP4 (Full HD)',
+  'MP4 (4K)',
+  'MOV (ProRes)',
+  'PRPROJ / AEP ต้นฉบับ',
+  'GIF (ภาพเคลื่อนไหว)',
+  'JPG / PNG (หน้าปก Cover)',
+] as const;
+
+export const VIDEO_DURATION_PRESETS = [
+  '< 15 วินาที (สั้นกระชับ)',
+  '15 - 30 วินาที (Reels / TikTok / Ads)',
+  '30 - 60 วินาที',
+  '1 - 3 นาที',
+  '> 3 นาที (วิดีโอยาว)',
+] as const;
+
+export const VIDEO_AUDIO_OPTIONS = [
+  '🎙️ มีเสียงพากย์ (Voiceover)',
+  '🎵 ดนตรีสนุกสนาน (Upbeat BGM)',
+  '☕ ดนตรีฟังสบาย (Chill / Relax)',
+  '⚡ เสียงเอฟเฟกต์ (SFX)',
+  '💬 มีซับไตเติลภาษาไทย (Subtitles)',
+  '🔇 ไม่ใส่เสียง (No Audio)',
+] as const;
+
+export function isVideoOrder(artworkType: string): boolean {
+  if (!artworkType) return false;
+  const lower = artworkType.toLowerCase();
+  return (
+    lower.includes('วิดีโอ') ||
+    lower.includes('video') ||
+    lower.includes('motion') ||
+    lower.includes('reels') ||
+    lower.includes('tiktok') ||
+    lower.includes('shorts')
+  );
+}
+

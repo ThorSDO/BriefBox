@@ -18,6 +18,7 @@ import {
   Clock,
   AlertTriangle,
   UserCheck,
+  Video,
 } from 'lucide-react';
 import { doc, updateDoc, deleteDoc, arrayUnion } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -32,6 +33,7 @@ import {
   PAYMENT_STATUS_META,
   URGENCY_META,
   UserProfile,
+  isVideoOrder,
 } from '../types/briefbox';
 
 interface OrderDetailModalProps {
@@ -691,12 +693,19 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
                   <div className="text-[11px] font-semibold text-slate-500">ประเภทงาน</div>
-                  <div className="mt-1 text-sm font-bold text-slate-900">
-                    {order.artworkType}
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-sm font-bold text-slate-900">
+                    {isVideoOrder(order.artworkType) && (
+                      <span className="inline-flex items-center gap-1 rounded bg-violet-100 px-1.5 py-0.5 text-[11px] font-bold text-violet-700">
+                        <Video className="h-3 w-3" /> วิดีโอ
+                      </span>
+                    )}
+                    <span>{order.artworkType}</span>
                   </div>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                  <div className="text-[11px] font-semibold text-slate-500">ขนาด / สัดส่วน</div>
+                  <div className="text-[11px] font-semibold text-slate-500">
+                    {isVideoOrder(order.artworkType) ? 'สัดส่วนวิดีโอ' : 'ขนาด / สัดส่วน'}
+                  </div>
                   <div className="mt-1 text-sm font-bold text-slate-900">
                     {order.dimensions}
                   </div>
@@ -724,17 +733,21 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 </div>
               </div>
 
-              {/* Copywriting Box */}
+              {/* Copywriting / Video Brief Box */}
               <div className="rounded-2xl border border-slate-200 p-5 space-y-4">
                 <h3 className="text-sm font-bold text-slate-900">
-                  ข้อความที่ต้องการใส่ในภาพ (Copywriting)
+                  {isVideoOrder(order.artworkType)
+                    ? 'รายละเอียดคอนเทนต์ & สคริปต์ (Video Brief)'
+                    : 'ข้อความที่ต้องการใส่ในภาพ (Copywriting)'}
                 </h3>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="rounded-xl bg-slate-50 p-3.5">
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] font-semibold text-slate-500">
-                        ข้อความหลัก (Headline)
+                        {isVideoOrder(order.artworkType)
+                          ? 'Hook 3 วินาทีแรก / ข้อความเปิดคลิป (Hook / Intro)'
+                          : 'ข้อความหลัก (Headline)'}
                       </span>
                       {order.headlineText && (
                         <button
@@ -762,7 +775,9 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                   <div className="rounded-xl bg-slate-50 p-3.5">
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] font-semibold text-slate-500">
-                        ข้อความรอง / รายละเอียด
+                        {isVideoOrder(order.artworkType)
+                          ? 'Call to Action / ข้อความปิดท้ายคลิป (Outro / CTA)'
+                          : 'ข้อความรอง / รายละเอียด'}
                       </span>
                       {order.subText && (
                         <button
@@ -790,7 +805,9 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
 
                 <div>
                   <span className="text-[11px] font-semibold text-slate-500">
-                    รายละเอียดบรีฟเพิ่มเติม
+                    {isVideoOrder(order.artworkType)
+                      ? 'สคริปต์ & รายละเอียดบรีฟวิดีโอเพิ่มเติม'
+                      : 'รายละเอียดบรีฟเพิ่มเติม'}
                   </span>
                   <p className="mt-1 whitespace-pre-line rounded-xl bg-slate-50 p-3.5 text-sm leading-relaxed text-slate-700">
                     {order.briefDetails || '- ไม่มีรายละเอียดเพิ่มเติม -'}

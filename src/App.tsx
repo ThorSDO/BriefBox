@@ -19,6 +19,7 @@ import {
   Phone,
   ShieldCheck,
   Trash2,
+  Video,
 } from 'lucide-react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import {
@@ -49,6 +50,7 @@ import {
   OrderStatus,
   URGENCY_META,
   UserProfile,
+  isVideoOrder,
 } from './types/briefbox';
 
 const DESIGNATED_ADMIN_EMAILS = [
@@ -678,7 +680,16 @@ export function App() {
             <Building2 className="h-3 w-3 text-slate-400" />
             {order.customerBrand || order.customerName}
           </span>
-          <span className="rounded-md bg-slate-50 px-2 py-0.5">{order.artworkType}</span>
+          <span
+            className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 ${
+              isVideoOrder(order.artworkType)
+                ? 'border border-violet-200 bg-violet-50 font-semibold text-violet-700'
+                : 'bg-slate-50 text-slate-700'
+            }`}
+          >
+            {isVideoOrder(order.artworkType) && <Video className="h-3 w-3" />}
+            <span>{order.artworkType}</span>
+          </span>
           <span className="rounded-md bg-slate-50 px-2 py-0.5">{order.dimensions}</span>
         </div>
 

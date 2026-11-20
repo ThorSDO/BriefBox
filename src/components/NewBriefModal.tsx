@@ -10,6 +10,10 @@ import {
   Type as TypeIcon,
   Link2,
   Check,
+  Video,
+  Film,
+  Clock,
+  Volume2,
 } from 'lucide-react';
 import { collection, addDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -20,6 +24,14 @@ import {
   OrderUrgency,
   ReferenceImage,
   UserProfile,
+  GRAPHIC_ARTWORK_TYPES,
+  VIDEO_ARTWORK_TYPES,
+  GRAPHIC_DIMENSION_PRESETS,
+  VIDEO_DIMENSION_PRESETS,
+  GRAPHIC_FILE_FORMAT_OPTIONS,
+  VIDEO_FILE_FORMAT_OPTIONS,
+  VIDEO_DURATION_PRESETS,
+  VIDEO_AUDIO_OPTIONS,
 } from '../types/briefbox';
 
 interface NewBriefModalProps {
@@ -27,28 +39,6 @@ interface NewBriefModalProps {
   onClose: () => void;
   onCreated: (orderTitle: string) => void;
 }
-
-const ARTWORK_TYPES = [
-  'Social Media Post',
-  'Banner / Ads',
-  'Logo / CI',
-  'Poster / สิ่งพิมพ์',
-  'Packaging',
-  'Rich Menu LINE OA',
-  'Infographic',
-  'อื่นๆ',
-];
-
-const DIMENSION_PRESETS = [
-  '1080x1080 px (1:1)',
-  '1080x1350 px (4:5)',
-  '1920x1080 px (16:9)',
-  '1080x1920 px (Story/Reels)',
-  '2500x1686 px (LINE Rich Menu)',
-  'A4 (210x297 mm)',
-];
-
-const FILE_FORMAT_OPTIONS = ['PNG', 'JPG', 'PDF สำหรับพิมพ์', 'AI / PSD ต้นฉบับ'];
 
 const MOOD_PRESETS = [
   'Minimal / สะอาดตา',
@@ -75,19 +65,30 @@ export const NewBriefModal: React.FC<NewBriefModalProps> = ({
     .toISOString()
     .split('T')[0];
 
+  // Work category: Graphic vs Video
+  const [workCategory, setWorkCategory] = useState<'graphic' | 'video'>('graphic');
+
   // Admin can optionally enter custom customer info if creating on behalf of a customer
   const [customerName, setCustomerName] = useState(profile.displayName);
   const [customerBrand, setCustomerBrand] = useState(profile.brandName || '');
   const [customerContact, setCustomerContact] = useState(profile.contactInfo || '');
 
-  // Section 1
+  // Section 1: Specs
   const [title, setTitle] = useState('');
-  const [artworkType, setArtworkType] = useState(ARTWORK_TYPES[0]);
-  const [dimensions, setDimensions] = useState(DIMENSION_PRESETS[0]);
+  const [artworkType, setArtworkType] = useState<string>(GRAPHIC_ARTWORK_TYPES[0]);
+  const [dimensions, setDimensions] = useState<string>(GRAPHIC_DIMENSION_PRESETS[0]);
   const [customDimension, setCustomDimension] = useState('');
   const [fileFormats, setFileFormats] = useState<string[]>(['PNG', 'JPG']);
 
-  // Section 2
+  // Video-specific states
+  const [videoDuration, setVideoDuration] = useState<string>(VIDEO_DURATION_PRESETS[1]);
+  const [customVideoDuration, setCustomVideoDuration] = useState('');
+  const [videoAudioOptions, setVideoAudioOptions] = useState<string[]>([
+    '🎵 ดนตรีสนุกสนาน (Upbeat BGM)',
+    '💬 มีซับไตเติลภาษาไทย (Subtitles)',
+  ]);
+
+  // Section 2: Mood & Content
   const [moodAndTone, setMoodAndTone] = useState(MOOD_PRESETS[0]);
   const [colorPalette, setColorPalette] = useState<string[]>(['#4f46e5', '#0f172a', '#ffffff']);
   const [newColorInput, setNewColorInput] = useState('#10b981');
@@ -95,7 +96,7 @@ export const NewBriefModal: React.FC<NewBriefModalProps> = ({
   const [subText, setSubText] = useState('');
   const [briefDetails, setBriefDetails] = useState('');
 
-  // Section 3
+  // Section 3: References & Deadline
   const [referenceImages, setReferenceImages] = useState<ReferenceImage[]>([]);
   const [referenceUrl, setReferenceUrl] = useState('');
   const [deadline, setDeadline] = useState(defaultDeadline);
@@ -105,9 +106,29 @@ export const NewBriefModal: React.FC<NewBriefModalProps> = ({
   const [uploadingImage, setUploadingImage] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
+  // Handle switching category between Graphic and Video
+  const handleCategoryChange = (category: 'graphic' | 'video') => {
+    setWorkCategory(category);
+    if (category === 'video') {
+      setArtworkType(VIDEO_ARTWORK_TYPES[0]);
+      setDimensions(VIDEO_DIMENSION_PRESETS[0]);
+      setFileFormats(['MP4 (Full HD)']);
+    } else {
+      setArtworkType(GRAPHIC_ARTWORK_TYPES[0]);
+      setDimensions(GRAPHIC_DIMENSION_PRESETS[0]);
+      setFileFormats(['PNG', 'JPG']);
+    }
+  };
+
   const toggleFormat = (fmt: string) => {
     setFileFormats((prev) =>
       prev.includes(fmt) ? prev.filter((item) => item !== fmt) : [...prev, fmt]
+    );
+  };
+
+  const toggleAudioOption = (opt: string) => {
+    setVideoAudioOptions((prev) =>
+      prev.includes(opt) ? prev.filter((item) => item !== opt) : [...prev, opt]
     );
   };
 
@@ -155,7 +176,11 @@ export const NewBriefModal: React.FC<NewBriefModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
-      setErrorMsg('กรุณาระบุชื่องาน Artwork');
+      setErrorMsg(
+        workCategory === 'video'
+          ? 'กรุณาระบุชื่องาน / วิดีโอ'
+          : 'กรุณาระบุชื่องาน Artwork'
+      );
       return;
     }
 
@@ -168,6 +193,30 @@ export const NewBriefModal: React.FC<NewBriefModalProps> = ({
           ? customDimension.trim() || 'ตามที่ระบุในบรีฟ'
           : dimensions;
 
+      // Compose brief details for video if video category
+      const resolvedDuration =
+        videoDuration === 'custom'
+          ? customVideoDuration.trim() || 'ตามระบุในบรีฟ'
+          : videoDuration;
+
+      let finalBriefDetails = briefDetails.trim();
+      if (workCategory === 'video') {
+        const videoSpecs = [
+          resolvedDuration ? `⏱️ ความยาววิดีโอ: ${resolvedDuration}` : '',
+          videoAudioOptions.length > 0
+            ? `🔊 รูปแบบเสียง/ซาวด์: ${videoAudioOptions.join(', ')}`
+            : '',
+          briefDetails.trim()
+            ? `🎬 สคริปต์ & รายละเอียดเพิ่มเติม:\n${briefDetails.trim()}`
+            : '',
+        ]
+          .filter(Boolean)
+          .join('\n\n');
+        finalBriefDetails = videoSpecs;
+      }
+
+      const defaultFormat = workCategory === 'video' ? 'MP4 (Full HD)' : 'PNG';
+
       const newOrder: Omit<ArtworkOrder, 'id'> = {
         orderNumber: `BB-${Math.floor(1000 + Math.random() * 9000)}`,
         customerId: profile.uid,
@@ -177,12 +226,12 @@ export const NewBriefModal: React.FC<NewBriefModalProps> = ({
         title: title.trim(),
         artworkType,
         dimensions: finalDimensions,
-        fileFormats: fileFormats.length > 0 ? fileFormats : ['PNG'],
+        fileFormats: fileFormats.length > 0 ? fileFormats : [defaultFormat],
         moodAndTone,
         colorPalette,
         headlineText: headlineText.trim(),
         subText: subText.trim(),
-        briefDetails: briefDetails.trim(),
+        briefDetails: finalBriefDetails,
         referenceUrl: referenceUrl.trim(),
         referenceImages,
         deadline,
@@ -206,8 +255,9 @@ export const NewBriefModal: React.FC<NewBriefModalProps> = ({
       };
 
       await addDoc(collection(db, 'orders'), newOrder);
+      const icon = workCategory === 'video' ? '🎬' : '🎨';
       void sendExternalWebhookNotification(
-        `🎨 [BriefBox] มีออเดอร์ใหม่!\n• รหัส: ${newOrder.orderNumber}\n• ชื่องาน: ${newOrder.title}\n• ลูกค้า: ${newOrder.customerName} (${newOrder.customerBrand})\n• ประเภท: ${newOrder.artworkType} (${newOrder.dimensions})\n• กำหนดส่ง: ${newOrder.deadline} (${newOrder.urgency})`
+        `${icon} [BriefBox] มีออเดอร์ใหม่!\n• รหัส: ${newOrder.orderNumber}\n• ชื่องาน: ${newOrder.title}\n• ลูกค้า: ${newOrder.customerName} (${newOrder.customerBrand})\n• ประเภท: ${newOrder.artworkType} (${newOrder.dimensions})\n• กำหนดส่ง: ${newOrder.deadline} (${newOrder.urgency})`
       );
       onCreated(newOrder.title);
       onClose();
@@ -218,21 +268,34 @@ export const NewBriefModal: React.FC<NewBriefModalProps> = ({
     }
   };
 
+  const isVideo = workCategory === 'video';
+  const currentArtworkTypes = isVideo ? VIDEO_ARTWORK_TYPES : GRAPHIC_ARTWORK_TYPES;
+  const currentDimensions = isVideo ? VIDEO_DIMENSION_PRESETS : GRAPHIC_DIMENSION_PRESETS;
+  const currentFormats = isVideo ? VIDEO_FILE_FORMAT_OPTIONS : GRAPHIC_FILE_FORMAT_OPTIONS;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-3 backdrop-blur-xs sm:p-6">
       <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-100 bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-4 text-white">
+        <div className="flex items-center justify-between border-b border-slate-100 bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-700 px-6 py-4 text-white">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15">
-              <Sparkles className="h-5 w-5 text-amber-300" />
+              {isVideo ? (
+                <Film className="h-5 w-5 text-amber-300" />
+              ) : (
+                <Sparkles className="h-5 w-5 text-amber-300" />
+              )}
             </div>
             <div>
               <h2 className="text-base font-bold sm:text-lg">
-                สั่งงาน Artwork ใหม่ (Creative Brief)
+                {isVideo
+                  ? 'สั่งงานวิดีโอ & โมชัน (Video Brief)'
+                  : 'สั่งงาน Artwork ใหม่ (Creative Brief)'}
               </h2>
               <p className="text-xs text-indigo-100">
-                กรอกรายละเอียดบรีฟให้ครบถ้วนเพื่อให้ดีไซเนอร์ประเมินราคาและออกแบบได้ตรงใจที่สุด
+                {isVideo
+                  ? 'กรอกรายละเอียดบรีฟวิดีโอ สัดส่วน ความยาว และสคริปต์ เพื่อให้ทีมตัดต่อประเมินราคาได้ตรงใจที่สุด'
+                  : 'กรอกรายละเอียดบรีฟให้ครบถ้วนเพื่อให้ดีไซเนอร์ประเมินราคาและออกแบบได้ตรงใจที่สุด'}
               </p>
             </div>
           </div>
@@ -252,6 +315,36 @@ export const NewBriefModal: React.FC<NewBriefModalProps> = ({
               {errorMsg}
             </div>
           )}
+
+          {/* Work Category Selector */}
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-1.5">
+            <div className="grid grid-cols-2 gap-2 text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => handleCategoryChange('graphic')}
+                className={`flex items-center justify-center gap-2 rounded-xl py-2.5 transition ${
+                  !isVideo
+                    ? 'border border-indigo-200 bg-white text-indigo-700 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Palette className="h-4 w-4 text-indigo-600" />
+                <span>🎨 งานภาพนิ่ง / กราฟิก (Graphic)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleCategoryChange('video')}
+                className={`flex items-center justify-center gap-2 rounded-xl py-2.5 transition ${
+                  isVideo
+                    ? 'border border-violet-200 bg-white text-violet-700 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Video className="h-4 w-4 text-violet-600" />
+                <span>🎬 งานวิดีโอ & โมชัน (Video / Reels)</span>
+              </button>
+            </div>
+          </div>
 
           {/* Customer Info (editable when admin creates on behalf of client) */}
           {profile.role === 'admin' && (
@@ -290,37 +383,45 @@ export const NewBriefModal: React.FC<NewBriefModalProps> = ({
             <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
               <Layers className="h-4 w-4 text-indigo-600" />
               <h3 className="text-sm font-bold text-slate-900">
-                ส่วนที่ 1: ข้อมูลชิ้นงาน & ขนาด
+                {isVideo
+                  ? 'ส่วนที่ 1: ข้อมูลชิ้นงานวิดีโอ & สัดส่วน'
+                  : 'ส่วนที่ 1: ข้อมูลชิ้นงาน & ขนาด'}
               </h3>
             </div>
 
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-slate-700">
-                ชื่องาน / โปรเจกต์ *
+                {isVideo ? 'ชื่องานวิดีโอ / โปรเจกต์ *' : 'ชื่องาน Artwork / โปรเจกต์ *'}
               </label>
               <input
                 type="text"
                 required
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="เช่น แบนเนอร์โปรโมชั่น 11.11 ลด 50%, โปสเตอร์เมนูใหม่ Matcha Latte"
+                placeholder={
+                  isVideo
+                    ? 'เช่น คลิปสั้น TikTok รีวิวสินค้าโปร 11.11, วิดีโอโฆษณายิงแอด Facebook Reels'
+                    : 'เช่น แบนเนอร์โปรโมชั่น 11.11 ลด 50%, โปสเตอร์เมนูใหม่ Matcha Latte'
+                }
                 className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15"
               />
             </div>
 
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-slate-700">
-                ประเภทงาน Artwork
+                {isVideo ? 'ประเภทงานวิดีโอ' : 'ประเภทงาน Artwork'}
               </label>
               <div className="flex flex-wrap gap-2">
-                {ARTWORK_TYPES.map((type) => (
+                {currentArtworkTypes.map((type) => (
                   <button
                     key={type}
                     type="button"
                     onClick={() => setArtworkType(type)}
                     className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
                       artworkType === type
-                        ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
+                        ? isVideo
+                          ? 'border-violet-600 bg-violet-50 text-violet-700'
+                          : 'border-indigo-600 bg-indigo-50 text-indigo-700'
                         : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                     }`}
                   >
@@ -332,17 +433,19 @@ export const NewBriefModal: React.FC<NewBriefModalProps> = ({
 
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-slate-700">
-                ขนาดและสัดส่วนภาพ
+                {isVideo ? 'ขนาดและสัดส่วนวิดีโอ (Aspect Ratio)' : 'ขนาดและสัดส่วนภาพ'}
               </label>
               <div className="flex flex-wrap gap-2">
-                {DIMENSION_PRESETS.map((dim) => (
+                {currentDimensions.map((dim) => (
                   <button
                     key={dim}
                     type="button"
                     onClick={() => setDimensions(dim)}
                     className={`rounded-xl border px-3 py-1.5 text-xs font-medium transition ${
                       dimensions === dim
-                        ? 'border-indigo-600 bg-indigo-50 text-indigo-700 font-semibold'
+                        ? isVideo
+                          ? 'border-violet-600 bg-violet-50 font-semibold text-violet-700'
+                          : 'border-indigo-600 bg-indigo-50 font-semibold text-indigo-700'
                         : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                     }`}
                   >
@@ -354,7 +457,7 @@ export const NewBriefModal: React.FC<NewBriefModalProps> = ({
                   onClick={() => setDimensions('custom')}
                   className={`rounded-xl border px-3 py-1.5 text-xs font-medium transition ${
                     dimensions === 'custom'
-                      ? 'border-indigo-600 bg-indigo-50 text-indigo-700 font-semibold'
+                      ? 'border-indigo-600 bg-indigo-50 font-semibold text-indigo-700'
                       : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                   }`}
                 >
@@ -366,7 +469,11 @@ export const NewBriefModal: React.FC<NewBriefModalProps> = ({
                   type="text"
                   value={customDimension}
                   onChange={(e) => setCustomDimension(e.target.value)}
-                  placeholder="ระบุขนาด เช่น 1200x628 px หรือ กว้าง 80 x สูง 200 cm (Roll-up)"
+                  placeholder={
+                    isVideo
+                      ? 'ระบุสัดส่วนหรือความละเอียด เช่น 1920x1920 px หรือ จอ LED หน้าร้าน 2560x1440'
+                      : 'ระบุขนาด เช่น 1200x628 px หรือ กว้าง 80 x สูง 200 cm (Roll-up)'
+                  }
                   className="mt-2.5 w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs outline-none focus:border-indigo-500"
                 />
               )}
@@ -377,7 +484,7 @@ export const NewBriefModal: React.FC<NewBriefModalProps> = ({
                 นามสกุลไฟล์ที่ต้องการรับ (เลือกได้มากกว่า 1)
               </label>
               <div className="flex flex-wrap gap-2">
-                {FILE_FORMAT_OPTIONS.map((fmt) => {
+                {currentFormats.map((fmt) => {
                   const selected = fileFormats.includes(fmt);
                   return (
                     <button
@@ -399,18 +506,101 @@ export const NewBriefModal: React.FC<NewBriefModalProps> = ({
             </div>
           </section>
 
-          {/* Section 2: Style & Copywriting */}
+          {/* Section 2: Style, Copywriting / Video Details */}
           <section className="space-y-4">
             <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
-              <Palette className="h-4 w-4 text-indigo-600" />
+              {isVideo ? (
+                <Video className="h-4 w-4 text-violet-600" />
+              ) : (
+                <Palette className="h-4 w-4 text-indigo-600" />
+              )}
               <h3 className="text-sm font-bold text-slate-900">
-                ส่วนที่ 2: สไตล์ โทนสี & ข้อความในภาพ (Copywriting)
+                {isVideo
+                  ? 'ส่วนที่ 2: ความยาว, สไตล์, สคริปต์ & รายละเอียดวิดีโอ (Video Brief)'
+                  : 'ส่วนที่ 2: สไตล์ โทนสี & ข้อความในภาพ (Copywriting)'}
               </h3>
             </div>
 
+            {/* Video-specific duration & audio preferences */}
+            {isVideo && (
+              <div className="space-y-4 rounded-2xl border border-violet-100 bg-violet-50/40 p-4">
+                {/* Duration */}
+                <div>
+                  <label className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-violet-900">
+                    <Clock className="h-3.5 w-3.5 text-violet-600" />
+                    <span>ความยาววิดีโอที่ต้องการ</span>
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {VIDEO_DURATION_PRESETS.map((dur) => (
+                      <button
+                        key={dur}
+                        type="button"
+                        onClick={() => setVideoDuration(dur)}
+                        className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
+                          videoDuration === dur
+                            ? 'border-violet-600 bg-violet-600 text-white shadow-xs'
+                            : 'border-slate-200 bg-white text-slate-700 hover:bg-violet-50'
+                        }`}
+                      >
+                        {dur}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setVideoDuration('custom')}
+                      className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
+                        videoDuration === 'custom'
+                          ? 'border-violet-600 bg-violet-600 text-white shadow-xs'
+                          : 'border-slate-200 bg-white text-slate-700 hover:bg-violet-50'
+                      }`}
+                    >
+                      กำหนดเอง
+                    </button>
+                  </div>
+                  {videoDuration === 'custom' && (
+                    <input
+                      type="text"
+                      value={customVideoDuration}
+                      onChange={(e) => setCustomVideoDuration(e.target.value)}
+                      placeholder="ระบุความยาว เช่น 45 วินาที หรือ ประมาณ 5 นาที"
+                      className="mt-2.5 w-full rounded-xl border border-violet-200 bg-white px-3.5 py-2 text-xs outline-none focus:border-violet-500"
+                    />
+                  )}
+                </div>
+
+                {/* Audio & Subtitles */}
+                <div>
+                  <label className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-violet-900">
+                    <Volume2 className="h-3.5 w-3.5 text-violet-600" />
+                    <span>รูปแบบเสียง, ดนตรี และคำบรรยาย (เลือกได้มากกว่า 1)</span>
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {VIDEO_AUDIO_OPTIONS.map((opt) => {
+                      const selected = videoAudioOptions.includes(opt);
+                      return (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => toggleAudioOption(opt)}
+                          className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
+                            selected
+                              ? 'border-violet-600 bg-violet-100/90 text-violet-800'
+                              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          {selected && <Check className="h-3.5 w-3.5 text-violet-700" />}
+                          <span>{opt}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-slate-700">
-                Mood & Tone ที่ต้องการ
+                {isVideo ? 'Mood & Tone ของวิดีโอ' : 'Mood & Tone ที่ต้องการ'}
               </label>
               <div className="flex flex-wrap gap-2">
                 {MOOD_PRESETS.map((mood) => (
@@ -432,7 +622,9 @@ export const NewBriefModal: React.FC<NewBriefModalProps> = ({
 
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-slate-700">
-                โทนสีของแบรนด์ / สีที่ต้องการเน้น
+                {isVideo
+                  ? 'โทนสีของแบรนด์ / โทนสีภาพวิดีโอ (Color Grading)'
+                  : 'โทนสีของแบรนด์ / สีที่ต้องการเน้น'}
               </label>
               <div className="mb-2.5 flex flex-wrap gap-2">
                 {COLOR_PALETTE_PRESETS.map((preset) => (
@@ -497,25 +689,39 @@ export const NewBriefModal: React.FC<NewBriefModalProps> = ({
               <div>
                 <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-slate-700">
                   <TypeIcon className="h-3.5 w-3.5 text-slate-400" />
-                  <span>ข้อความหลักในภาพ (Headline)</span>
+                  <span>
+                    {isVideo
+                      ? 'Hook 3 วินาทีแรก / ข้อความเปิดคลิป (Hook / Intro)'
+                      : 'ข้อความหลักในภาพ (Headline)'}
+                  </span>
                 </label>
                 <input
                   type="text"
                   value={headlineText}
                   onChange={(e) => setHeadlineText(e.target.value)}
-                  placeholder="เช่น ลดแรง 50% เฉพาะสัปดาห์นี้!"
+                  placeholder={
+                    isVideo
+                      ? 'เช่น "รู้หรือไม่! 3 ข้อผิดพลาดคนทำธุรกิจ..." หรือ ตัวหนังสือเปิดคลิป'
+                      : 'เช่น ลดแรง 50% เฉพาะสัปดาห์นี้!'
+                  }
                   className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-indigo-500"
                 />
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-slate-700">
-                  ข้อความรอง / ราคา / ช่องทางติดต่อในภาพ
+                  {isVideo
+                    ? 'Call to Action / ข้อความปิดท้ายคลิป (Outro / CTA)'
+                    : 'ข้อความรอง / ราคา / ช่องทางติดต่อในภาพ'}
                 </label>
                 <input
                   type="text"
                   value={subText}
                   onChange={(e) => setSubText(e.target.value)}
-                  placeholder="เช่น วันนี้ - 30 พ.ย. • LINE @bloomcafe"
+                  placeholder={
+                    isVideo
+                      ? 'เช่น "กดตะกร้าสั่งซื้อด่วน!", "สอบถามข้อมูลเพิ่ม LINE @bloomcafe"'
+                      : 'เช่น วันนี้ - 30 พ.ย. • LINE @bloomcafe'
+                  }
                   className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-indigo-500"
                 />
               </div>
@@ -523,13 +729,19 @@ export const NewBriefModal: React.FC<NewBriefModalProps> = ({
 
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-slate-700">
-                รายละเอียดบรีฟเพิ่มเติม (สิ่งที่อยากเน้น หรือสิ่งที่ห้ามใส่)
+                {isVideo
+                  ? 'ลำดับเรื่องราว / สคริปต์ / รายละเอียดวิดีโอ (Script & Storyboard)'
+                  : 'รายละเอียดบรีฟเพิ่มเติม (สิ่งที่อยากเน้น หรือสิ่งที่ห้ามใส่)'}
               </label>
               <textarea
-                rows={3}
+                rows={isVideo ? 4 : 3}
                 value={briefDetails}
                 onChange={(e) => setBriefDetails(e.target.value)}
-                placeholder="อธิบายภาพรวมที่ต้องการ เช่น อยากให้สินค้าอยู่ตรงกลาง มีแสงเงาดูพรีเมียม ตัวหนังสืออ่านง่ายบนมือถือ..."
+                placeholder={
+                  isVideo
+                    ? 'ระบุลำดับเหตุการณ์หรือบทพูดในคลิป เช่น:\n- วินาที 0-3: โชว์ปัญหาหน้าหมองคล้ำ\n- วินาที 4-15: โชว์สินค้าและวิธีใช้\n- วินาที 16-30: สรุปโปรโมชั่นและ CTA หรือสิ่งที่ห้ามใส่ในวิดีโอ'
+                    : 'อธิบายภาพรวมที่ต้องการ เช่น อยากให้สินค้าอยู่ตรงกลาง มีแสงเงาดูพรีเมียม ตัวหนังสืออ่านง่ายบนมือถือ...'
+                }
                 className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-indigo-500"
               />
             </div>
@@ -540,13 +752,17 @@ export const NewBriefModal: React.FC<NewBriefModalProps> = ({
             <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
               <Calendar className="h-4 w-4 text-indigo-600" />
               <h3 className="text-sm font-bold text-slate-900">
-                ส่วนที่ 3: ภาพตัวอย่าง (Reference) & กำหนดส่งงาน
+                {isVideo
+                  ? 'ส่วนที่ 3: ไฟล์ Reference / ลิงก์ฟุตเทจ & กำหนดส่งงาน'
+                  : 'ส่วนที่ 3: ภาพตัวอย่าง (Reference) & กำหนดส่งงาน'}
               </h3>
             </div>
 
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-slate-700">
-                แนบภาพตัวอย่าง / โลโก้ / ภาพสินค้า (สูงสุด 3 ภาพ)
+                {isVideo
+                  ? 'แนบภาพตัวอย่าง / สตอรี่บอร์ด / โลโก้ / แคปหน้าจอวิดีโอตัวอย่าง (สูงสุด 3 ภาพ)'
+                  : 'แนบภาพตัวอย่าง / โลโก้ / ภาพสินค้า (สูงสุด 3 ภาพ)'}
               </label>
               <div className="flex flex-wrap items-center gap-3">
                 {referenceImages.map((img) => (
@@ -593,13 +809,21 @@ export const NewBriefModal: React.FC<NewBriefModalProps> = ({
             <div>
               <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-slate-700">
                 <Link2 className="h-3.5 w-3.5 text-slate-400" />
-                <span>ลิงก์ Reference หรือ Google Drive โลโก้/ไฟล์สินค้า (ถ้ามี)</span>
+                <span>
+                  {isVideo
+                    ? 'ลิงก์คลิป Reference (TikTok, YouTube) หรือ Google Drive วิดีโอฟุตเทจ/สคริปต์'
+                    : 'ลิงก์ Reference หรือ Google Drive โลโก้/ไฟล์สินค้า (ถ้ามี)'}
+                </span>
               </label>
               <input
                 type="url"
                 value={referenceUrl}
                 onChange={(e) => setReferenceUrl(e.target.value)}
-                placeholder="https://drive.google.com/... หรือ https://pinterest.com/..."
+                placeholder={
+                  isVideo
+                    ? 'https://drive.google.com/... หรือ https://www.tiktok.com/@... หรือ ลิงก์ YouTube'
+                    : 'https://drive.google.com/... หรือ https://pinterest.com/...'
+                }
                 className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-indigo-500"
               />
             </div>
@@ -660,9 +884,17 @@ export const NewBriefModal: React.FC<NewBriefModalProps> = ({
             type="button"
             onClick={handleSubmit}
             disabled={submitting || uploadingImage}
-            className="rounded-xl bg-indigo-600 px-5 py-2 text-sm font-bold text-white shadow-md shadow-indigo-600/20 transition hover:bg-indigo-700 disabled:opacity-60"
+            className={`rounded-xl px-5 py-2 text-sm font-bold text-white shadow-md transition disabled:opacity-60 ${
+              isVideo
+                ? 'bg-violet-600 shadow-violet-600/20 hover:bg-violet-700'
+                : 'bg-indigo-600 shadow-indigo-600/20 hover:bg-indigo-700'
+            }`}
           >
-            {submitting ? 'กำลังส่งบรีฟ...' : 'ส่งบรีฟสั่งงาน Artwork'}
+            {submitting
+              ? 'กำลังส่งบรีฟ...'
+              : isVideo
+                ? 'ส่งบรีฟสั่งงานวิดีโอ (Video Brief)'
+                : 'ส่งบรีฟสั่งงาน Artwork'}
           </button>
         </div>
       </div>
