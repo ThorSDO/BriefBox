@@ -130,18 +130,20 @@ service cloud.firestore {
     }
 
     function isValidDateString(dateStr) {
-      return dateStr is string &&
-             dateStr.size() >= 19 &&
-             dateStr.size() <= 40 &&
-             dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,9})?(Z|[+-]\\d{2}:\\d{2})?$");
+      return (dateStr is timestamp) ||
+             (dateStr is string &&
+              dateStr.size() >= 19 &&
+              dateStr.size() <= 40 &&
+              dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,9})?(Z|[+-]\\d{2}:\\d{2})?$"));
     }
 
     function isValidDeadline(dateStr) {
-      return dateStr is string &&
-             dateStr.size() <= 40 &&
-             (dateStr == '' ||
-              dateStr.matches("^\\d{4}-\\d{2}-\\d{2}$") ||
-              isValidDateString(dateStr));
+      return (dateStr is timestamp) ||
+             (dateStr is string &&
+              dateStr.size() <= 40 &&
+              (dateStr == '' ||
+               dateStr.matches("^\\d{4}-\\d{2}-\\d{2}$") ||
+               isValidDateString(dateStr)));
     }
 
     // ===============================================================
@@ -197,10 +199,13 @@ service cloud.firestore {
                'submittedAt', 'status', 'customerFeedback', 'reviewedAt'
              ]) &&
              d.version is number && d.version >= 1 && d.version <= 100 &&
-             (d.imageUrl == '' || isValidImageOrWebUrl(d.imageUrl)) &&
              d.designerNote is string && d.designerNote.size() <= 2000 &&
              isValidDateString(d.submittedAt) &&
-             d.status in ['pending_review', 'revision_requested', 'approved'];
+             d.status in ['pending_review', 'revision_requested', 'approved'] &&
+             (d.imageUrl is string && (d.imageUrl == '' || isValidImageOrWebUrl(d.imageUrl))) &&
+             (!('externalLink' in d) || (d.externalLink is string && d.externalLink.size() <= 2048 && (d.externalLink == '' || isValidWebUrl(d.externalLink)))) &&
+             (!('customerFeedback' in d) || (d.customerFeedback is string && d.customerFeedback.size() <= 2000)) &&
+             (!('reviewedAt' in d) || isValidDateString(d.reviewedAt));
     }
 
     function isCustomerDraftReviewValid(oldDraft, newDraft) {
@@ -209,7 +214,9 @@ service cloud.firestore {
              newDraft.version == oldDraft.version &&
              newDraft.imageUrl == oldDraft.imageUrl &&
              newDraft.designerNote == oldDraft.designerNote &&
-             newDraft.submittedAt == oldDraft.submittedAt;
+             newDraft.submittedAt == oldDraft.submittedAt &&
+             (('externalLink' in oldDraft) == ('externalLink' in newDraft)) &&
+             (!('externalLink' in oldDraft) || newDraft.externalLink == oldDraft.externalLink);
     }
 
     function isValidDraftsOnUpdate(oldList, newList, oldStatus, adminActor) {
@@ -246,6 +253,7 @@ service cloud.firestore {
              c.authorName is string && c.authorName.size() >= 1 && c.authorName.size() <= 120 &&
              c.authorRole in ['customer', 'admin'] &&
              c.message is string && c.message.size() <= 2000 &&
+             (!('attachmentUrl' in c) || (c.attachmentUrl is string && (c.attachmentUrl == '' || isValidImageOrWebUrl(c.attachmentUrl)))) &&
              isValidDateString(c.createdAt);
     }
 
@@ -254,14 +262,13 @@ service cloud.firestore {
              newList.size() <= 100 &&
              (
                newList == oldList ||
+               adminActor ||
                (
                  newList.size() >= oldList.size() &&
                  isValidComment(newList[newList.size() - 1]) &&
-                 (adminActor ||
-                  (newList[newList.size() - 1].authorId == request.auth.uid &&
-                   newList[newList.size() - 1].authorRole == 'customer'))
-               ) ||
-               adminActor
+                 newList[newList.size() - 1].authorId == request.auth.uid &&
+                 newList[newList.size() - 1].authorRole == 'customer'
+               )
              );
     }
 
@@ -357,49 +364,111 @@ service cloud.firestore {
       ];
     }
 
+    // High-performance delta validator for updates to stay strictly within the 1000 CEL expression limit
     function isValidOrderUpdate(oldData, newData, orderId, adminActor) {
-      return isValidOrderBase(newData, orderId) &&
-             areImmutableFieldsUnchanged(['createdAt']) &&
-             (!('id' in oldData) || ('id' in newData && newData.id == oldData.id)) &&
-             (newData.fileFormats == oldData.fileFormats ||
-              newData.fileFormats.size() == 0 ||
-              (newData.fileFormats[0] is string && newData.fileFormats[0].size() >= 1 && newData.fileFormats[0].size() <= 30)) &&
-             (newData.colorPalette == oldData.colorPalette ||
-              newData.colorPalette.size() == 0 ||
-              (newData.colorPalette[0] is string && newData.colorPalette[0].size() >= 1 && newData.colorPalette[0].size() <= 50)) &&
-             (newData.referenceImages == oldData.referenceImages ||
-              newData.referenceImages.size() == 0 ||
-              isValidReferenceImage(newData.referenceImages[newData.referenceImages.size() - 1])) &&
-             isValidDraftsOnUpdate(oldData.drafts, newData.drafts, oldData.status, adminActor) &&
-             isValidCommentsOnUpdate(oldData.comments, newData.comments, adminActor) &&
-             (
-               (
-                 adminActor &&
-                 isValidAdminStatusTransition(newData.status)
-               ) ||
-               (
-                 !adminActor &&
-                 // Customer cannot hijack customerId or tamper with admin-managed fields
-                 areImmutableFieldsUnchanged([
-                   'customerId', 'orderNumber', 'quotedPrice', 'quoteNote',
-                   'assignedDesigner', 'maxRevisions', 'finalDeliverableUrl',
-                   'finalPreviewImage', 'finalNote'
-                 ]) &&
-                 isValidCustomerStatusTransition(oldData, newData) &&
-                 // Customer cannot self-approve payment to 'paid' or alter once 'paid'
-                 (
-                   (oldData.paymentStatus == 'paid' &&
-                    areImmutableFieldsUnchanged(['paymentStatus', 'paymentSlipUrl', 'paymentPaidAt'])) ||
-                   (oldData.paymentStatus != 'paid' &&
-                    newData.paymentStatus in ['unpaid', 'pending_verification'])
-                 ) &&
-                 // Customer can only increment usedRevisions by +1 when requesting a revision
-                 (newData.usedRevisions == oldData.usedRevisions ||
-                  (newData.status == 'revision' &&
-                   newData.usedRevisions == oldData.usedRevisions + 1 &&
-                   newData.usedRevisions <= newData.maxRevisions))
-               )
-             );
+      let affected = request.resource.data.diff(resource.data).affectedKeys();
+      return hasOnlyAllowedFields(newData, [
+               'id', 'orderNumber', 'customerId', 'customerName', 'customerBrand',
+               'customerContact', 'title', 'artworkType', 'dimensions', 'fileFormats',
+               'moodAndTone', 'colorPalette', 'headlineText', 'subText', 'briefDetails',
+               'referenceUrl', 'referenceImages', 'deadline', 'urgency', 'maxRevisions',
+               'usedRevisions', 'status', 'assignedDesigner', 'quotedPrice', 'quoteNote',
+               'paymentStatus', 'paymentSlipUrl', 'paymentPaidAt', 'drafts',
+               'finalDeliverableUrl', 'finalPreviewImage', 'finalNote', 'comments',
+               'createdAt', 'updatedAt'
+             ]) &&
+             hasRequiredFields(newData, [
+               'orderNumber', 'customerId', 'customerName', 'customerBrand',
+               'customerContact', 'title', 'artworkType', 'dimensions', 'fileFormats',
+               'moodAndTone', 'colorPalette', 'headlineText', 'subText', 'briefDetails',
+               'referenceUrl', 'referenceImages', 'deadline', 'urgency', 'maxRevisions',
+               'usedRevisions', 'status', 'assignedDesigner', 'quotedPrice', 'quoteNote',
+               'paymentStatus', 'paymentSlipUrl', 'paymentPaidAt', 'drafts',
+               'finalDeliverableUrl', 'finalPreviewImage', 'finalNote', 'comments',
+               'createdAt', 'updatedAt'
+             ]) &&
+             // Always immutable fields:
+             !affected.hasAny(['createdAt']) &&
+             (!('id' in oldData) || !affected.hasAny(['id'])) &&
+             (!('id' in newData) || newData.id == orderId) &&
+             // Admin-managed fields (immutable for customer / non-admin):
+             (adminActor || !affected.hasAny([
+               'customerId', 'orderNumber', 'quotedPrice', 'quoteNote',
+               'assignedDesigner', 'maxRevisions', 'finalDeliverableUrl',
+               'finalPreviewImage', 'finalNote'
+             ])) &&
+             // Timestamp validation:
+             (!affected.hasAny(['updatedAt']) || isValidDateString(newData.updatedAt)) &&
+             // Status transitions:
+             (!affected.hasAny(['status']) ||
+               (adminActor ? isValidAdminStatusTransition(newData.status) : isValidCustomerStatusTransition(oldData, newData))) &&
+             // Revisions counter:
+             (!affected.hasAny(['usedRevisions']) ||
+               (adminActor ?
+                 (newData.usedRevisions is number && newData.usedRevisions >= 0 && newData.usedRevisions <= 100) :
+                 (newData.status == 'revision' &&
+                  newData.usedRevisions == oldData.usedRevisions + 1 &&
+                  newData.usedRevisions <= oldData.maxRevisions))) &&
+             // Drafts:
+             (!affected.hasAny(['drafts']) ||
+               isValidDraftsOnUpdate(oldData.drafts, newData.drafts, oldData.status, adminActor)) &&
+             // Comments:
+             (!affected.hasAny(['comments']) ||
+               isValidCommentsOnUpdate(oldData.comments, newData.comments, adminActor)) &&
+             // Payment fields:
+             (!affected.hasAny(['paymentStatus', 'paymentSlipUrl', 'paymentPaidAt']) ||
+               (adminActor ?
+                 (newData.paymentStatus in ['unpaid', 'pending_verification', 'paid'] &&
+                  (newData.paymentSlipUrl == '' || isValidImageOrWebUrl(newData.paymentSlipUrl)) &&
+                  (newData.paymentPaidAt == '' || isValidDateString(newData.paymentPaidAt))) :
+                 (oldData.paymentStatus != 'paid' &&
+                  newData.paymentStatus in ['unpaid', 'pending_verification'] &&
+                  (newData.paymentSlipUrl == '' || isValidImageOrWebUrl(newData.paymentSlipUrl)) &&
+                  (newData.paymentPaidAt == '' || isValidDateString(newData.paymentPaidAt))))) &&
+             // Admin-managed field values when edited by admin:
+             (!adminActor || (
+               (!affected.hasAny(['quotedPrice']) || (newData.quotedPrice is number && newData.quotedPrice >= 0 && newData.quotedPrice <= 10000000)) &&
+               (!affected.hasAny(['quoteNote']) || (newData.quoteNote is string && newData.quoteNote.size() <= 2000)) &&
+               (!affected.hasAny(['assignedDesigner']) || (newData.assignedDesigner is string && newData.assignedDesigner.size() <= 120)) &&
+               (!affected.hasAny(['maxRevisions']) || (newData.maxRevisions is number && newData.maxRevisions >= 0 && newData.maxRevisions <= 100)) &&
+               (!affected.hasAny(['finalDeliverableUrl']) || (newData.finalDeliverableUrl is string && (newData.finalDeliverableUrl == '' || isValidImageOrWebUrl(newData.finalDeliverableUrl)))) &&
+               (!affected.hasAny(['finalPreviewImage']) || (newData.finalPreviewImage is string && (newData.finalPreviewImage == '' || isValidImageOrWebUrl(newData.finalPreviewImage)))) &&
+               (!affected.hasAny(['finalNote']) || (newData.finalNote is string && newData.finalNote.size() <= 2000))
+             )) &&
+             // Customer contact fields if modified:
+             (!affected.hasAny(['customerName', 'customerBrand', 'customerContact']) || (
+               (!affected.hasAny(['customerName']) || (newData.customerName is string && newData.customerName.size() <= 120)) &&
+               (!affected.hasAny(['customerBrand']) || (newData.customerBrand is string && newData.customerBrand.size() <= 120)) &&
+               (!affected.hasAny(['customerContact']) || (newData.customerContact is string && newData.customerContact.size() <= 300))
+             )) &&
+             // Brief content fields if modified:
+             (!affected.hasAny(['title', 'artworkType', 'dimensions', 'moodAndTone', 'headlineText', 'subText', 'briefDetails', 'deadline', 'urgency', 'referenceUrl']) || (
+               (!affected.hasAny(['title']) || (newData.title is string && newData.title.size() >= 1 && newData.title.size() <= 200)) &&
+               (!affected.hasAny(['artworkType']) || (newData.artworkType is string && newData.artworkType.size() >= 1 && newData.artworkType.size() <= 100)) &&
+               (!affected.hasAny(['dimensions']) || (newData.dimensions is string && newData.dimensions.size() <= 120)) &&
+               (!affected.hasAny(['moodAndTone']) || (newData.moodAndTone is string && newData.moodAndTone.size() <= 500)) &&
+               (!affected.hasAny(['headlineText']) || (newData.headlineText is string && newData.headlineText.size() <= 500)) &&
+               (!affected.hasAny(['subText']) || (newData.subText is string && newData.subText.size() <= 1000)) &&
+               (!affected.hasAny(['briefDetails']) || (newData.briefDetails is string && newData.briefDetails.size() <= 5000)) &&
+               (!affected.hasAny(['deadline']) || isValidDeadline(newData.deadline)) &&
+               (!affected.hasAny(['urgency']) || newData.urgency in ['normal', 'urgent', 'express']) &&
+               (!affected.hasAny(['referenceUrl']) || (newData.referenceUrl is string && (newData.referenceUrl == '' || isValidWebUrl(newData.referenceUrl))))
+             )) &&
+             // Array fields if modified:
+             (!affected.hasAny(['fileFormats', 'colorPalette', 'referenceImages']) || (
+               (!affected.hasAny(['fileFormats']) ||
+                 (newData.fileFormats is list && newData.fileFormats.size() <= 8 &&
+                  (newData.fileFormats.size() == 0 ||
+                   (newData.fileFormats[0] is string && newData.fileFormats[0].size() >= 1 && newData.fileFormats[0].size() <= 30)))) &&
+               (!affected.hasAny(['colorPalette']) ||
+                 (newData.colorPalette is list && newData.colorPalette.size() <= 8 &&
+                  (newData.colorPalette.size() == 0 ||
+                   (newData.colorPalette[0] is string && newData.colorPalette[0].size() >= 1 && newData.colorPalette[0].size() <= 50)))) &&
+               (!affected.hasAny(['referenceImages']) ||
+                 (newData.referenceImages is list && newData.referenceImages.size() <= 6 &&
+                  (newData.referenceImages.size() == 0 ||
+                   isValidReferenceImage(newData.referenceImages[newData.referenceImages.size() - 1]))))
+             ));
     }
 
     // ===============================================================
@@ -433,7 +502,7 @@ service cloud.firestore {
 
     // Users collection: contains PII (email, contactInfo)
     match /users/{userId} {
-      allow read: if isSignedIn() && (isAdmin() || request.auth.uid == userId);
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
       allow create: if isSignedIn() &&
                        request.auth.uid == userId &&
                        isValidUser(request.resource.data, userId);
@@ -447,15 +516,16 @@ service cloud.firestore {
     // Orders collection: customer-owned artwork orders managed by admins
     match /orders/{orderId} {
       allow get: if isSignedIn() &&
-                    (isAdmin() || (resource != null && resource.data.customerId == request.auth.uid));
+                    ((resource != null && resource.data.customerId == request.auth.uid) || isAdmin());
       allow list: if isSignedIn() &&
-                     (isAdmin() || (resource != null && resource.data.customerId == request.auth.uid));
+                     ((resource != null && resource.data.customerId == request.auth.uid) || isAdmin());
       allow create: if isSignedIn() &&
-                       (isAdmin() || request.resource.data.customerId == request.auth.uid) &&
+                       ((request.resource.data.customerId == request.auth.uid) || isAdmin()) &&
                        isValidOrderCreate(request.resource.data, orderId);
       allow update: if isSignedIn() &&
-                       (isAdmin() || (resource != null && resource.data.customerId == request.auth.uid)) &&
-                       isValidOrderUpdate(resource.data, request.resource.data, orderId, isAdmin());
+                       ((resource != null && resource.data.customerId == request.auth.uid) || isAdmin()) &&
+                       isValidOrderUpdate(resource.data, request.resource.data, orderId,
+                         isDesignatedAdminEmail() || (resource.data.customerId != request.auth.uid && isAdmin()));
       allow delete: if isAdmin();
     }
 
