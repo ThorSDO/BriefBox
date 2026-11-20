@@ -53,18 +53,158 @@ function getMoodEnglish(mood: string): string {
   return 'Professional, polished, harmonious and brand-aligned';
 }
 
-function getAspectRatio(dimensions: string): { name: string; instruction: string } {
-  const d = dimensions.toLowerCase();
-  if (d.includes('9:16') || d.includes('1080x1920')) {
-    return { name: '9:16 (Vertical Mobile / Reels / TikTok)', instruction: 'vertical aspect ratio 9:16 format' };
+interface DimensionInfo {
+  name: string;
+  instruction: string;
+  orientation: string;
+  raw: string;
+}
+
+function parseDimensions(dimensionsStr: string): DimensionInfo {
+  const raw = (dimensionsStr || '').trim();
+  if (!raw) {
+    return {
+      raw: 'Standard',
+      name: '1:1 (Square Post)',
+      instruction: 'square aspect ratio 1:1 format',
+      orientation: 'square',
+    };
   }
-  if (d.includes('16:9') || d.includes('1920x1080')) {
-    return { name: '16:9 (Horizontal Landscape / Banner)', instruction: 'wide horizontal aspect ratio 16:9 banner format' };
+
+  const d = raw.toLowerCase();
+
+  // Try extracting width and height numbers (e.g. 227x1021, 1920*1080, 210 x 297, etc.)
+  const match = d.match(/(\d+(?:\.\d+)?)\s*(?:[xX*×:]|\s+x\s+)\s*(\d+(?:\.\d+)?)/);
+  if (match) {
+    const w = parseFloat(match[1]);
+    const h = parseFloat(match[2]);
+    if (w > 0 && h > 0) {
+      const ratio = w / h;
+
+      // 1:1 Square
+      if (Math.abs(ratio - 1) < 0.05) {
+        return {
+          raw,
+          name: `${raw} (Square 1:1)`,
+          instruction: `exact canvas dimensions ${raw} in square 1:1 aspect ratio`,
+          orientation: 'square 1:1',
+        };
+      }
+
+      // 9:16 Vertical (Reels / Story / TikTok)
+      if (d.includes('9:16') || Math.abs(ratio - 9 / 16) < 0.04) {
+        return {
+          raw,
+          name: `${raw} (Vertical 9:16 - Reels / Story)`,
+          instruction: `exact canvas dimensions ${raw} in tall vertical 9:16 format`,
+          orientation: 'vertical 9:16',
+        };
+      }
+
+      // 16:9 Landscape (Widescreen / Banner / Billboard)
+      if (d.includes('16:9') || Math.abs(ratio - 16 / 9) < 0.05) {
+        return {
+          raw,
+          name: `${raw} (Horizontal 16:9 - Landscape / Banner)`,
+          instruction: `exact canvas dimensions ${raw} in wide horizontal 16:9 landscape format`,
+          orientation: 'horizontal 16:9 landscape',
+        };
+      }
+
+      // 4:5 Vertical Feed
+      if (d.includes('4:5') || Math.abs(ratio - 4 / 5) < 0.04) {
+        return {
+          raw,
+          name: `${raw} (Vertical 4:5 - Social Feed)`,
+          instruction: `exact canvas dimensions ${raw} in vertical portrait 4:5 format`,
+          orientation: 'vertical 4:5 portrait',
+        };
+      }
+
+      // Ultra-tall vertical (e.g., 227x1021 -> ratio ~0.22, ~1:4.5)
+      if (ratio < 0.55) {
+        const inv = (h / w).toFixed(1);
+        return {
+          raw,
+          name: `${raw} (Ultra-tall Vertical Banner / Billboard ~1:${inv})`,
+          instruction: `exact canvas dimensions ${raw} in an ultra-tall vertical billboard/banner format with approximate aspect ratio 1:${inv} (canvas is very tall and narrow)`,
+          orientation: `ultra-tall vertical (~1:${inv})`,
+        };
+      }
+
+      // Standard vertical portrait (0.55 <= ratio < 0.95)
+      if (ratio < 0.95) {
+        const inv = (h / w).toFixed(1);
+        return {
+          raw,
+          name: `${raw} (Vertical Portrait ~1:${inv})`,
+          instruction: `exact canvas dimensions ${raw} in vertical portrait format (approx. 1:${inv} ratio)`,
+          orientation: `vertical portrait (~1:${inv})`,
+        };
+      }
+
+      // Ultra-wide horizontal (ratio >= 2.0)
+      if (ratio >= 2.0) {
+        const rStr = ratio.toFixed(1);
+        return {
+          raw,
+          name: `${raw} (Ultra-wide Panoramic Banner ~${rStr}:1)`,
+          instruction: `exact canvas dimensions ${raw} in an ultra-wide panoramic landscape format with approximate ratio ${rStr}:1`,
+          orientation: `ultra-wide panoramic (~${rStr}:1)`,
+        };
+      }
+
+      // Standard horizontal landscape (1.05 < ratio < 2.0)
+      const rStr = ratio.toFixed(1);
+      return {
+        raw,
+        name: `${raw} (Horizontal Landscape ~${rStr}:1)`,
+        instruction: `exact canvas dimensions ${raw} in horizontal landscape format with approximate ratio ${rStr}:1`,
+        orientation: `horizontal landscape (~${rStr}:1)`,
+      };
+    }
   }
-  if (d.includes('4:5') || d.includes('1080x1350')) {
-    return { name: '4:5 (Portrait Feed)', instruction: 'vertical social feed aspect ratio 4:5 format' };
+
+  // Preset keywords without direct numbers
+  if (d.includes('9:16') || d.includes('reels') || d.includes('story')) {
+    return {
+      raw,
+      name: `${raw} (Vertical 9:16)`,
+      instruction: `exact target format "${raw}" in vertical 9:16 orientation`,
+      orientation: 'vertical 9:16',
+    };
   }
-  return { name: '1:1 (Square Post)', instruction: 'square aspect ratio 1:1 format' };
+  if (d.includes('16:9') || d.includes('landscape') || d.includes('widescreen')) {
+    return {
+      raw,
+      name: `${raw} (Horizontal 16:9)`,
+      instruction: `exact target format "${raw}" in horizontal 16:9 widescreen orientation`,
+      orientation: 'horizontal 16:9 landscape',
+    };
+  }
+  if (d.includes('4:5')) {
+    return {
+      raw,
+      name: `${raw} (Vertical 4:5)`,
+      instruction: `exact target format "${raw}" in vertical portrait 4:5 orientation`,
+      orientation: 'vertical 4:5 portrait',
+    };
+  }
+  if (d.includes('a4')) {
+    return {
+      raw,
+      name: `${raw} (A4 Print Portrait)`,
+      instruction: `exact target format "${raw}" in standard vertical A4 print ratio (1:1.41)`,
+      orientation: 'vertical A4 portrait',
+    };
+  }
+
+  return {
+    raw,
+    name: raw,
+    instruction: `exact dimensions and format "${raw}"`,
+    orientation: 'custom format',
+  };
 }
 
 export const AiPromptAssistant: React.FC<AiPromptAssistantProps> = ({ order }) => {
@@ -77,7 +217,7 @@ export const AiPromptAssistant: React.FC<AiPromptAssistantProps> = ({ order }) =
   const brand = order.customerBrand || 'Brand';
   const colorsText = order.colorPalette.length > 0 ? order.colorPalette.join(', ') : 'harmonious brand tones';
   const moodEn = getMoodEnglish(order.moodAndTone);
-  const aspect = getAspectRatio(order.dimensions);
+  const aspect = parseDimensions(order.dimensions);
   const selectedStyleDesc = STYLE_OPTIONS.find((s) => s.id === style)?.desc || STYLE_OPTIONS[0].desc;
 
   const promptText = useMemo(() => {
@@ -85,22 +225,23 @@ export const AiPromptAssistant: React.FC<AiPromptAssistantProps> = ({ order }) =
       return `Create a high-resolution commercial visual asset for "${brand}".
 Subject & Project: "${order.title}". ${order.headlineText ? `Key focal theme: "${order.headlineText}".` : ''}
 ${order.briefDetails ? `Creative details & requirements: ${order.briefDetails}` : ''}
+Target Canvas Dimensions: ${order.dimensions} (${aspect.name}).
 Visual Style: ${selectedStyleDesc}.
 Mood & Atmosphere: ${moodEn}.
 Color Harmony: Accent colors featuring ${colorsText}.
-Framing & Composition: Designed in ${aspect.instruction}. Leave generous clean negative space in the composition for typography, headline copy, and brand logo placement.
-Quality: Ultra-detailed, commercial advertising quality, 8k resolution, crisp studio lighting, no deformed text or messy logos.`;
+Framing & Composition: Custom-tailored specifically for ${aspect.instruction}. The composition and visual elements MUST strictly fit this ${aspect.orientation} orientation (DO NOT generate in a default square 1:1 or horizontal landscape format if dimensions specify otherwise). Leave generous clean negative space for typography, headline copy, and brand logo placement.
+Quality: Ultra-detailed, commercial advertising quality, 8k resolution, crisp studio lighting, clean background, no deformed text or messy logos.`;
     }
 
     if (engine === 'gemini') {
       return `Photorealistic commercial advertisement artwork for "${brand}", project: "${order.title}".
 Context & Features: ${order.briefDetails || order.title}. ${order.headlineText ? `Visual hook: "${order.headlineText}".` : ''}
+Target Canvas Dimensions: ${order.dimensions} (${aspect.name}).
 Aesthetic Style: ${selectedStyleDesc}.
 Atmospheric Mood: ${moodEn}.
 Palette: Primary brand colors ${colorsText}.
-Format: Composition framed in ${aspect.instruction}.
-Camera & Lighting: Professional advertising shoot, 50mm prime lens, clean depth of field, balanced soft shadows, pristine textures, high dynamic range.
-Layout Consideration: Ample breathing space for copy overlay.`;
+Canvas Framing: Strictly composed and framed for ${aspect.instruction}. Composition must strictly respect this ${aspect.orientation} format with dedicated breathing room for text and branding overlays.
+Camera & Lighting: Professional advertising shoot, 50mm prime lens, clean depth of field, balanced soft shadows, pristine textures, high dynamic range.`;
     }
 
     // Creative Director / Concept Breakdown for ChatGPT or Gemini Chat
@@ -110,7 +251,7 @@ Layout Consideration: Ample breathing space for copy overlay.`;
 • แบรนด์: ${brand}
 • ชื่องาน/โปรเจกต์: ${order.title}
 • ประเภทชิ้นงาน: ${order.artworkType} (${isVideo ? 'งานวิดีโอ/โมชัน' : 'งานกราฟิกภาพนิ่ง'})
-• สัดส่วน/ขนาด: ${order.dimensions} (${aspect.name})
+• สัดส่วน/ขนาดจริงที่ลูกค้าบรีฟ: ${order.dimensions} (${aspect.name})
 • Mood & Tone: ${order.moodAndTone}
 • โทนสีหลักของแบรนด์: ${colorsText}
 ${order.headlineText ? `• ข้อความหลัก/Hook: "${order.headlineText}"` : ''}
@@ -118,10 +259,10 @@ ${order.subText ? `• ข้อความรอง/CTA: "${order.subText}"` :
 ${order.briefDetails ? `• รายละเอียดบรีฟเพิ่มเติม:\n${order.briefDetails}` : ''}
 
 ช่วยเสนอแนะเป็นข้อๆ:
-1. ไอเดียการจัดวาง Layout (Composition): วางองค์ประกอบสินค้า/กราฟิก, Headline และ CTA อย่างไรให้ดึงดูดสายตา
+1. ไอเดียการจัดวาง Layout (Composition): บนขนาดจริง ${order.dimensions} (${aspect.orientation}) ควรวางองค์ประกอบสินค้า/กราฟิก, Headline และ CTA อย่างไรให้บาลานซ์สวยงามและดึงดูดสายตา
 2. สไตล์ภาพและพื้นหลัง (Background & Lighting): แนะนำการใช้แสงและพื้นผิวที่เข้ากับแบรนด์
 3. คำแนะนำด้าน Typography: สไตล์ฟอนต์ภาษาไทยและอังกฤษที่แมตช์กับ Mood & Tone
-4. Prompt ภาษาอังกฤษสั้นๆ สำหรับนำไปเจนภาพ Background หรือองค์ประกอบหลักใน ChatGPT / Gemini`;
+4. Prompt ภาษาอังกฤษสั้นๆ สำหรับนำไปเจนภาพ Background หรือองค์ประกอบหลักใน ChatGPT / Gemini โดยให้ระบุขนาด ${order.dimensions} ด้วย`;
   }, [engine, style, brand, order, colorsText, moodEn, aspect, selectedStyleDesc, isVideo]);
 
   const handleCopy = async () => {
